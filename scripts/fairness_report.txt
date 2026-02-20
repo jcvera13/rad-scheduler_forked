@@ -1,0 +1,48 @@
+FAIRNESS ANALYSIS REPORT
+Generated : 2026-02-19 20:37:30
+Source    : Imaging Healthcare - List by Staff Export - 6_21_2025 through 12_21_2025.xlsx
+Date range: 2025-06-21 to 2025-12-21
+
+SHIFT COUNT FAIRNESS
+  Mean   : 78.13
+  Std Dev: 13.94
+  CV     : 17.84%  — MODERATE — some imbalance
+
+HOURS ASSIGNED FAIRNESS
+  Mean   : 566.60
+  Std Dev: 109.59
+  CV     : 19.34%  — MODERATE — some imbalance
+
+PER-PERSON BREAKDOWN
+Name                        Shifts    Hours
+---------------------------------------------
+John Johnson                    99    663.0
+James Cooper                    94    552.0
+Gregory Anderson                92    737.0
+Rowena Tena                     90    450.0
+JuanCarlos Vera                 89    723.0
+Michael Booker                  83    657.0
+Eric Chou                       82    622.0
+Michael Grant                   81    686.0
+Eric Kim                        76    460.0
+Mark Schechter                  76    501.0
+Brian Trinh                     76    601.0
+Eric Lizerbram                  69    542.0
+Yonatan Rotman                  58    497.0
+Kriti Rishi                     56    366.0
+Karen Yuan                      51    442.0
+
+TASK BREAKDOWN
+    146  Mercy 1  (on site) 0800-1600 (M1 (on site) 0800-1600)
+    127  Mercy 2 (remote) 0930-1730 (M2 (remote) 0930-1730)
+    126  Mercy 3 (remote) 1600-2200 (M3 (remote) 1600-2200)
+    125  IHS Remote MRI (Remote MRI)
+    105  Mercy 0 (M0 (remote) 0700-0800, 1130-1230)
+     95  IHS Remote Breast & US (Remote Breast)
+     82  IHS Washington MRI x1080 (Wash MRI 0800-1700)
+     76  IHS Poway PET x1680 (Poway PET 0800-1700)
+     59  IHS Encinitas Breast & US x1581 (Enc Breast 0800-1700)
+     58  Early Person Call (on site Sat/remote Sun) (EP 0800-1430)
+     58  Mercy 0 Weekend (M0 Weekend)
+     58  Scripps O'Toole Breast Center (O'Toole 0730-1630)
+     57  Late Person Call (remote) (Dx-CALL1400-2200)

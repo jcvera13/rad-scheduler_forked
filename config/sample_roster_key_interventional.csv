@@ -1,0 +1,5 @@
+id,index,initials,name,email,role,exempt_dates,fte,participates_mercy,participates_ir,participates_weekend,subspecialties,notes
+1,0,DA,Derrick Allen,,Radiologist,,1.0,yes,yes,yes,IR,
+2,1,SS,Sharjeel Sabir,,Radiologist,,1.0,yes,yes,yes,IR,
+3,2,SF,Sina Fartash,,Radiologist,,1.0,yes,yes,yes,IR,
+4,3,TR,Ted Rothenberg,,Radiologist,,1.0,yes,yes,yes,IR,

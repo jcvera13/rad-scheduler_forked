@@ -1,0 +1,64 @@
+{
+  "task_ha_map": {
+    "Administrative (ADMIN)": 0,
+    "Cardiac Imaging": 0,
+    "Early Person Call (on site Sat/remote Sun) (EP 0800-1430)": 7,
+    "Extra Full Day": 0,
+    "IHS National City Breast & US x2280 (NC Breast 0800-1700)": 9,
+    "IHS National City General x2280 (NC Gen 0800-1700))": 9,
+    "IHS National City MRI x2280 (NC MRI 0800-1700)": 9,
+    "IHS National City PET x2280 (NC PET 0800-1700)": 9,
+    "IHS Poway General x 1680 (Poway Gen 0800-1700)": 8,
+    "IHS Poway MRI x1680 (Poway MRI 0800-1700)": 9,
+    "IHS Remote General (Remote General)": 8,
+    "IHS Remote MRI (Remote MRI)": 8,
+    "IHS Remote PET (Remote PET)": 8,
+    "Mercy 0 (M0 (remote) 0700-0800, 1130-1230)": 6,
+    "Mercy 0 Weekend (M0 Weekend)": 2,
+    "No Call": 0,
+    "No EP": 0,
+    "OFF ALL DAY": 0,
+    "Pres/VP vacation": 0,
+    "Pulmonary Conference (1230-130) (Pulm Conf (1230-130))": 0,
+    "Skull Base": 0,
+    "VACATION": 0,
+    "Weekend IHS MRI": 0,
+    "Weekend IHS PET": 0
+  },
+  "history": [
+    {
+      "run_timestamp": "2026-02-17T08:53:50",
+      "input_file": "List by Assignment Tag - 1_1_2026 through 4_1_2027.xlsx",
+      "output_file": "List by Assignment Tag - 1_1_2026 through 4_1_2027_cleaned.xlsx",
+      "assigned": {
+        "Administrative (ADMIN)": 0,
+        "Cardiac Imaging": 0,
+        "Early Person Call (on site Sat/remote Sun) (EP 0800-1430)": 7,
+        "Extra Full Day": 0,
+        "IHS National City Breast & US x2280 (NC Breast 0800-1700)": 9,
+        "IHS National City General x2280 (NC Gen 0800-1700))": 9,
+        "IHS National City MRI x2280 (NC MRI 0800-1700)": 9,
+        "IHS National City PET x2280 (NC PET 0800-1700)": 9,
+        "IHS Poway General x 1680 (Poway Gen 0800-1700)": 8,
+        "IHS Poway MRI x1680 (Poway MRI 0800-1700)": 9,
+        "IHS Remote General (Remote General)": 8,
+        "IHS Remote MRI (Remote MRI)": 8,
+        "IHS Remote PET (Remote PET)": 8,
+        "Mercy 0 (M0 (remote) 0700-0800, 1130-1230)": 6,
+        "Mercy 0 Weekend (M0 Weekend)": 2,
+        "No Call": 0,
+        "No EP": 0,
+        "OFF ALL DAY": 0,
+        "Pres/VP vacation": 0,
+        "Pulmonary Conference (1230-130) (Pulm Conf (1230-130))": 0,
+        "Skull Base": 0,
+        "VACATION": 0,
+        "Weekend IHS MRI": 0,
+        "Weekend IHS PET": 0
+      },
+      "skipped": [
+        "IHS Remote Breast & US (Remote Breast)"
+      ]
+    }
+  ]
+}

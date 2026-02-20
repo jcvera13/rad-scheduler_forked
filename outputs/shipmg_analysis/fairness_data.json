@@ -1,0 +1,138 @@
+{
+  "date_range": {
+    "start": "2025-06-21",
+    "end": "2025-12-21"
+  },
+  "shift_metrics": {
+    "mean": 96.36842105263158,
+    "std": 37.467474352417064,
+    "cv": 38.87941085177084,
+    "min": 9.0,
+    "max": 142.0,
+    "range": 133.0
+  },
+  "hour_metrics": {
+    "mean": 418.1842105263158,
+    "std": 188.38742349116592,
+    "cv": 45.04890877014854,
+    "min": 2.0,
+    "max": 667.0,
+    "range": 665.0
+  },
+  "per_person": {
+    "Gregory Anderson": {
+      "shifts": 142,
+      "hours": 595.0
+    },
+    "James Cooper": {
+      "shifts": 141,
+      "hours": 458.0
+    },
+    "Michael Booker": {
+      "shifts": 137,
+      "hours": 485.0
+    },
+    "JuanCarlos Vera": {
+      "shifts": 129,
+      "hours": 552.5
+    },
+    "Mark Schechter": {
+      "shifts": 121,
+      "hours": 503.0
+    },
+    "Michael Grant": {
+      "shifts": 119,
+      "hours": 667.0
+    },
+    "Eric Lizerbram": {
+      "shifts": 119,
+      "hours": 489.0
+    },
+    "Eric Chou": {
+      "shifts": 117,
+      "hours": 379.0
+    },
+    "Brian Trinh": {
+      "shifts": 116,
+      "hours": 502.0
+    },
+    "John Johnson": {
+      "shifts": 112,
+      "hours": 557.0
+    },
+    "Rowena Tena": {
+      "shifts": 105,
+      "hours": 492.0
+    },
+    "Eric Kim": {
+      "shifts": 103,
+      "hours": 472.0
+    },
+    "Yonatan Rotman": {
+      "shifts": 80,
+      "hours": 501.0
+    },
+    "Kriti Rishi": {
+      "shifts": 79,
+      "hours": 442.0
+    },
+    "Karen Yuan": {
+      "shifts": 68,
+      "hours": 504.0
+    },
+    "Derrick Allen": {
+      "shifts": 50,
+      "hours": 288.0
+    },
+    "Sina Fartash": {
+      "shifts": 44,
+      "hours": 27.0
+    },
+    "Sharjeel Sabir": {
+      "shifts": 40,
+      "hours": 30.0
+    },
+    "Ted Rothenberg": {
+      "shifts": 9,
+      "hours": 2.0
+    }
+  },
+  "task_counts": {
+    "Mercy 1  (on site) 0800-1600 (M1 (on site) 0800-1600)": 149,
+    "Mercy 2 (remote) 0930-1730 (M2 (remote) 0930-1730)": 128,
+    "Mercy 0 (M0 (remote) 0700-0800, 1130-1230)": 126,
+    "Mercy 3 (remote) 1600-2200 (M3 (remote) 1600-2200)": 126,
+    "IHS Remote MRI (Remote MRI)": 125,
+    "IHS Remote Breast & US (Remote Breast)": 105,
+    "IHS Washington MRI x1080 (Wash MRI 0800-1700)": 82,
+    "IHS Remote General (Remote General)": 78,
+    "IHS Poway PET x1680 (Poway PET 0800-1700)": 76,
+    "Scripps O'Toole Breast Center (O'Toole 0730-1630)": 67,
+    "IHS Encinitas Breast & US x1581 (Enc Breast 0800-1700)": 61,
+    "Early Person Call (on site Sat/remote Sun) (EP 0800-1430)": 58,
+    "Mercy 0 Weekend (M0 Weekend)": 58,
+    "Late Person Call (remote) (Dx-CALL1400-2200)": 57,
+    "Weekend IHS MRI": 54,
+    "Weekend IHS PET": 53,
+    "IHS Washington Breast & US x1081 (Wash Breast 0800-1700)": 52,
+    "IHS Encinitas MRI x1580 (Enc MRI 0800-1700)": 51,
+    "IHS Remote PET (Remote PET)": 51,
+    "Synergy": 44,
+    "No EP": 32,
+    "Administrative (ADMIN)": 29,
+    "IHS Poway General x 1680 (Poway Gen 0800-1700)": 26,
+    "IHS Poway MRI x1680 (Poway MRI 0800-1700)": 21,
+    "IHS Encinitas General x1580 (Enc Gen 0800-1700)": 20,
+    "IHS National City MRI x2280 (NC MRI 0800-1700)": 19,
+    "IHS National City Breast & US x2280 (NC Breast 0800-1700)": 17,
+    "0715 Chest Conference": 13,
+    "IHS National City PET x2280 (NC PET 0800-1700)": 13,
+    "IHS National City General x2280 (NC Gen 0800-1700))": 11,
+    "Head and Neck Tumor Board 12-1:30 (H&N TB 12-1:30)": 11,
+    "Extra Full Day": 6,
+    "Tumor Board": 6,
+    "Neurovascular MDM quarterly": 3,
+    "Pulmonary Conference (1230-130) (Pulm Conf (1230-130))": 2,
+    "Surgery M&M": 1
+  }
+}

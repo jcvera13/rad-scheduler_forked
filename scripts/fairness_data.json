@@ -1,0 +1,99 @@
+{
+  "date_range": {
+    "start": "2025-06-21",
+    "end": "2025-12-21"
+  },
+  "shift_metrics": {
+    "mean": 78.13333333333334,
+    "std": 13.937320003820279,
+    "cv": 17.837866899087388,
+    "min": 51.0,
+    "max": 99.0,
+    "range": 48.0
+  },
+  "hour_metrics": {
+    "mean": 566.6,
+    "std": 109.59367378335911,
+    "cv": 19.342335648316116,
+    "min": 366.0,
+    "max": 737.0,
+    "range": 371.0
+  },
+  "per_person": {
+    "John Johnson": {
+      "shifts": 99,
+      "hours": 663.0
+    },
+    "James Cooper": {
+      "shifts": 94,
+      "hours": 552.0
+    },
+    "Gregory Anderson": {
+      "shifts": 92,
+      "hours": 737.0
+    },
+    "Rowena Tena": {
+      "shifts": 90,
+      "hours": 450.0
+    },
+    "JuanCarlos Vera": {
+      "shifts": 89,
+      "hours": 723.0
+    },
+    "Michael Booker": {
+      "shifts": 83,
+      "hours": 657.0
+    },
+    "Eric Chou": {
+      "shifts": 82,
+      "hours": 622.0
+    },
+    "Michael Grant": {
+      "shifts": 81,
+      "hours": 686.0
+    },
+    "Eric Kim": {
+      "shifts": 76,
+      "hours": 460.0
+    },
+    "Mark Schechter": {
+      "shifts": 76,
+      "hours": 501.0
+    },
+    "Brian Trinh": {
+      "shifts": 76,
+      "hours": 601.0
+    },
+    "Eric Lizerbram": {
+      "shifts": 69,
+      "hours": 542.0
+    },
+    "Yonatan Rotman": {
+      "shifts": 58,
+      "hours": 497.0
+    },
+    "Kriti Rishi": {
+      "shifts": 56,
+      "hours": 366.0
+    },
+    "Karen Yuan": {
+      "shifts": 51,
+      "hours": 442.0
+    }
+  },
+  "task_counts": {
+    "Mercy 1  (on site) 0800-1600 (M1 (on site) 0800-1600)": 146,
+    "Mercy 2 (remote) 0930-1730 (M2 (remote) 0930-1730)": 127,
+    "Mercy 3 (remote) 1600-2200 (M3 (remote) 1600-2200)": 126,
+    "IHS Remote MRI (Remote MRI)": 125,
+    "Mercy 0 (M0 (remote) 0700-0800, 1130-1230)": 105,
+    "IHS Remote Breast & US (Remote Breast)": 95,
+    "IHS Washington MRI x1080 (Wash MRI 0800-1700)": 82,
+    "IHS Poway PET x1680 (Poway PET 0800-1700)": 76,
+    "IHS Encinitas Breast & US x1581 (Enc Breast 0800-1700)": 59,
+    "Early Person Call (on site Sat/remote Sun) (EP 0800-1430)": 58,
+    "Mercy 0 Weekend (M0 Weekend)": 58,
+    "Scripps O'Toole Breast Center (O'Toole 0730-1630)": 58,
+    "Late Person Call (remote) (Dx-CALL1400-2200)": 57
+  }
+}

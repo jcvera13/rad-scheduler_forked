@@ -1,0 +1,555 @@
+# Detailed Subspecialty & Rotation Analysis
+## REVISED: With M0 Weighting Adjustments
+## Period: January 21 - March 21, 2026 (2 months)
+
+**Analysis excludes:** Ted Rothenberg, Sharjeel Sabir, Sina Fartash  
+**Revision date:** February 10, 2026
+
+---
+
+## REVISION NOTE: What Changed
+
+**This revision updates the general rotation fairness analysis to account for M0 as a 2-hour "helper" shift (weighted at 0.25Ã—) rather than a full 8-hour shift.**
+
+**What changed:**
+- Inpatient weekday CV: 61.2% (unweighted from old data) â†’ **50.8% (weighted from new data)**
+- Recognition that M0 shows **worst unfairness** (71.7% CV)
+- Updated workload calculations use **hours-equivalent weighting**
+
+**What didn't change:**
+- **Subspecialty assignments** (breast, neuro, cardiac, IR remain skill-based)
+- **Recommendation** (adopt fair rotation engine, now with weighted cursor)
+- **Urgency** (still URGENT - 50.8% CV is still 5Ã— worse than <10% target)
+
+---
+
+## EXECUTIVE SUMMARY
+
+### Current State Overview
+
+**General Rotations (M0-M3 Inpatient Weekday):**
+- **Weighted CV: 50.8%** âŒ POOR (5Ã— worse than <10% target)
+- **Individual shift CVs:**
+  - M0 (2hr helper): 71.7% CV âŒ SEVERE
+  - M1 (8hr full): 78.3% CV âŒ SEVERE (worst!)
+  - M2 (8hr full): 74.9% CV âŒ SEVERE
+  - M3 (6hr evening): 33.4% CV âš ï¸ FAIR
+- **Range:** 23-127 weighted shifts (5.5:1 ratio)
+- **Status:** Fair rotation engine URGENTLY needed
+
+**Subspecialty Work (Skill-Based):**
+- **Breast/Mammo:** Appropriately concentrated among 6 specialists âœ…
+- **Neuroradiology:** Balanced among 3 specialists (33% each) âœ…
+- **Cardiac:** Led by John Johnson (70%) âœ…
+- **IR:** Dedicated specialist (Derrick Allen) âœ…
+- **Status:** Keep manual assignment
+
+---
+
+## PART 1: GENERAL ROTATION FAIRNESS (REVISED WITH M0 WEIGHTING)
+
+### 1.1 Inpatient Weekday - Weighted Analysis
+
+**Shift Duration Weighting:**
+```
+M0 (Helper):  2 hours  â†’ weight 0.25Ã—
+M1 (Full):    8 hours  â†’ weight 1.00Ã—
+M2 (Full):    8 hours  â†’ weight 1.00Ã—
+M3 (Evening): 6 hours  â†’ weight 0.75Ã—
+```
+
+**Overall Weighted Statistics:**
+- Mean: 58.6 weighted shift-equivalents
+- Std Dev: 29.8
+- **CV: 50.8%** âŒ POOR
+- Range: 23.2 - 127.2
+- Ratio: 5.5:1 (max/min)
+
+**MOST ASSIGNED (Weighted):**
+```
+Radiologist         Weighted    M0   M1   M2   M3   Pattern
+â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+Johnson             127.2       26   65   40   21   Full-shift heavy
+Grant                98.0       22   34   39   26   Balanced
+Chou                 87.5       53    9   48   23   M0-heavy!
+Vera                 74.0       19   27   25   23   Balanced
+Anderson             73.5       28   23   27   22   Balanced
+```
+
+**LEAST ASSIGNED (Weighted):**
+```
+Radiologist         Weighted    M0   M1   M2   M3   Pattern
+â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+Schechter            23.2        5    2    2   24   M3-heavy
+Rishi                24.8        6   10    8    7   Low overall
+Tena                 32.0       11    5    7   23   M3-heavy
+Cooper               33.8       10    6    8   23   M3-heavy
+Yuan                 36.8        4   24    8    5   M1-heavy
+```
+
+### 1.2 Individual Shift Type Fairness
+
+**M0 Helper Shift (0700-0800, 1130-1230 = 2 hours):**
+- Mean: 17.7 shifts
+- **CV: 71.7%** âŒ SEVERE (worst of all shifts!)
+- Range: 4-53 (13:1 ratio!)
+- **Interpretation:** M0 shows highest unfairness, suggesting no systematic rotation
+
+**M1 Full Shift (0800-1600 = 8 hours, on-site):**
+- Mean: 20.1 shifts
+- **CV: 78.3%** âŒ SEVERE
+- Range: 2-65 (32:1 ratio!)
+- **Interpretation:** M1 has worst CV percentage, critical for on-site coverage
+
+**M2 Full Shift (0930-1730 = 8 hours, remote):**
+- Mean: 19.2 shifts
+- **CV: 74.9%** âŒ SEVERE
+- Range: 2-48 (24:1 ratio!)
+- **Interpretation:** Remote doesn't help - M2 fairness is also poor
+
+**M3 Evening Shift (1600-2200 = 6 hours):**
+- Mean: 19.7 shifts
+- **CV: 33.4%** âš ï¸ FAIR (best of group)
+- Range: 5-26 (5:1 ratio)
+- **Interpretation:** M3 shows best fairness - proves target is achievable!
+
+---
+
+## PART 2: SUBSPECIALTY WORK ANALYSIS
+
+### 2.1 Breast Imaging / Mammography Specialists
+
+**Total Breast/Mammo Assignments:** Approximately 301 over 6 months (from earlier analysis)
+
+**Primary Breast Imagers:**
+
+**By Total Volume:**
+```
+Radiologist          Total    O'Toole   Remote   Washington   Encinitas
+â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+Rowena Tena           67        14        27         8          18
+Derrick Allen         44         9        10        23           2
+James Cooper          43        11        21         3           8
+Kriti Rishi           42        19         4        12           7
+Eric Kim              36        13        13         5           5
+Mark Schechter        36         0        15         1          20
+John Johnson          17         1        15         0           1
+```
+
+**Concentration Pattern:**
+- **Top 6 radiologists cover 90% of breast volume** âœ…
+- **Kriti Rishi:** Primary O'Toole mammographer (28% of O'Toole volume)
+- **Rowena Tena:** Primary breast specialist across all sites (22.3% total)
+- **Derrick Allen:** Dual IR + Breast (concentrates at Washington - 43%)
+- **Mark Schechter:** Heavy Encinitas coverage (33% of Encinitas)
+
+**Interpretation:**
+- âœ… **Appropriate skill-based concentration**
+- âœ… **Keep manual assignment for all breast/mammo**
+- âŒ **DO NOT include in fair rotation engine**
+
+**Impact on General Rotation:**
+- Kriti Rishi: 42 breast assignments â†’ Explains low general outpatient (3 shifts)
+- Rowena Tena: 67 breast assignments â†’ Explains low general outpatient (2 shifts)
+- **These radiologists should be EXCLUDED from general outpatient pool**
+
+---
+
+### 2.2 Neuroradiology (Skull Base)
+
+**Total Skull Base Assignments:** 113
+
+**Neuro Specialists (100% coverage by 3 radiologists):**
+```
+Radiologist          Assignments    % of Total
+â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+James Cooper              39         34.5%
+Brian Trinh               37         32.7%
+JuanCarlos Vera           37         32.7%
+```
+
+**Analysis:**
+- âœ… **Perfect 3-way subspecialty split** (33.3% each)
+- âœ… **Already achieving excellent internal fairness**
+- âœ… **Clear subspecialty designation** (no other radiologists assigned)
+
+**Interpretation:**
+- âœ… **Keep manual assignment** (or use dedicated 3-person neuro rotation if desired)
+- âŒ **DO NOT include in general rotation engine**
+
+---
+
+### 2.3 Cardiac Imaging
+
+**Total Cardiac Assignments:** 104
+
+**Cardiac Specialists:**
+```
+Radiologist          Assignments    % of Total
+â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+John Johnson              73         70.2%   â† Primary
+Brian Trinh               30         28.8%   â† Secondary
+JuanCarlos Vera            1          1.0%   â† Rare backup
+```
+
+**Analysis:**
+- **John Johnson is PRIMARY cardiac imager** (70% of volume)
+- **Brian Trinh provides secondary coverage** (29%)
+- **This explains John's workload pattern:**
+  - 73 cardiac + 26 M0 + 65 M1 + 40 M2 + 21 M3 = **225 total assignments**
+  - BUT 73 are subspecialty (cardiac), not general rotation
+  - His **general rotation weighted workload is 127.2** (still highest, but context matters)
+
+**Interpretation:**
+- âœ… **Keep manual assignment for cardiac**
+- âŒ **DO NOT include in general rotation engine**
+- âš ï¸ **Consider:** Should John's total workload (cardiac + general) be balanced?
+
+**Workload Balance Question:**
+```
+John's total: 127.2 general + 73 cardiac = ~200 total assignments
+Others: ~60 general + 0-40 subspecialty = ~60-100 total assignments
+
+Is this intentional role differentiation or unintended imbalance?
+```
+
+---
+
+### 2.4 Interventional Radiology (IR)
+
+**Total IR Assignments:** 106
+
+**IR Specialist:**
+```
+Radiologist          Assignments    % of Total
+â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+Derrick Allen            106         100.0%
+```
+
+**Analysis:**
+- **Derrick Allen is sole IR specialist** in this dataset
+- **Explains his minimal general rotation participation:**
+  - Only 1 M0 shift (weighted: 0.25)
+  - No M1 shifts
+  - No M2 shifts
+  - No M3 shifts
+  - **Total general rotation: ~0.25 weighted shifts**
+- **His 44 "other" assignments are breast imaging** (cross-trained)
+
+**Total Workload:**
+```
+Derrick: 106 IR + 44 breast = 150 subspecialty assignments
+         + 0.25 general rotation = ~150 total
+
+This is HIGHER than most radiologists' total workload!
+```
+
+**Interpretation:**
+- âœ… **Keep dedicated IR assignment**
+- âœ… **Exclude from general rotation** (he's fully utilized in IR + breast)
+- âŒ **DO NOT include in fair rotation engine**
+
+---
+
+## PART 3: ROTATION POOL RECOMMENDATIONS (REVISED)
+
+### 3.1 General Inpatient Weekday Pool (M0-M3)
+
+**INCLUDE (14 radiologists):**
+```
+âœ… Gregory Anderson    âœ… Michael Booker      âœ… Eric Chou
+âœ… James Cooper        âœ… Michael Grant       âœ… John Johnson
+âœ… Eric Kim            âœ… Eric Lizerbram      âœ… Kriti Rishi
+âœ… Yonatan Rotman      âœ… Mark Schechter      âœ… Rowena Tena
+âœ… Brian Trinh         âœ… JuanCarlos Vera     âœ… Karen Yuan
+```
+
+**EXCLUDE (1 radiologist):**
+```
+âŒ Derrick Allen (dedicated IR specialist + breast cross-training)
+```
+
+**Configuration:**
+```python
+INPATIENT_WEEKDAY_POOL = {
+    'pool_size': 14,
+    'shifts': ['M0', 'M1', 'M2', 'M3'],
+    'weights': {'M0': 0.25, 'M1': 1.0, 'M2': 1.0, 'M3': 0.75},
+    'cursor': 0,  # Reset for fresh start
+}
+```
+
+---
+
+### 3.2 General Outpatient Pool
+
+**EXCLUDE from general outpatient (4 radiologists with heavy subspecialty):**
+```
+âŒ John Johnson     (73 cardiac assignments)
+âŒ Kriti Rishi      (42 breast assignments)
+âŒ Rowena Tena      (67 breast assignments)
+âŒ Derrick Allen    (106 IR + 44 breast assignments)
+```
+
+**INCLUDE in general outpatient (11 radiologists):**
+```
+âœ… Gregory Anderson    âœ… Michael Booker      âœ… Eric Chou
+âœ… James Cooper        âœ… Michael Grant       âœ… Eric Kim
+âœ… Eric Lizerbram      âœ… Yonatan Rotman      âœ… Mark Schechter
+âœ… Brian Trinh         âœ… JuanCarlos Vera     âœ… Karen Yuan
+```
+
+---
+
+## PART 4: M0 PATTERN ANALYSIS (NEW SECTION)
+
+### 4.1 The M0 Mystery
+
+**M0 Distribution (71.7% CV - worst of all shifts):**
+```
+M0-Heavy Radiologists:
+  Eric Chou:         53 M0s  (299% of mean 17.7)
+  Gregory Anderson:  28 M0s  (158% of mean)
+  Eric Lizerbram:    27 M0s  (152% of mean)
+
+M0-Light Radiologists:
+  Karen Yuan:         4 M0s  (23% of mean)
+  Mark Schechter:     5 M0s  (28% of mean)
+  Kriti Rishi:        6 M0s  (34% of mean)
+```
+
+### 4.2 M0:Full Shift Ratios
+
+**Analyzing M0 preference patterns:**
+```
+Radiologist         M0    Full(M1+M2+M3)   Ratio    Pattern
+â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+Eric Chou           53         80          0.66     Balanced
+Eric Lizerbram      27         64          0.42     Balanced
+Gregory Anderson    28         72          0.39     Balanced
+Rowena Tena         11         35          0.31     Balanced
+...
+Karen Yuan           4         37          0.11     Full-heavy
+Yonatan Rotman       8         51          0.16     Full-heavy
+Mark Schechter       5         28          0.18     Full-heavy
+```
+
+### 4.3 Possible Explanations
+
+**Hypothesis A - Preference-Based:**
+- Eric Chou prefers/requests M0 helper shifts (work-life balance)
+- Fits around other commitments (outpatient, etc.)
+- Intentional assignment pattern
+
+**Hypothesis B - Availability-Based:**
+- M0 assigned based on who's available 0700-0800 and 1130-1230
+- Some radiologists have conflicting schedules
+- Unintentional pattern based on logistics
+
+**Hypothesis C - No System:**
+- M0 assigned ad-hoc without rotation
+- "Filler" shift when gaps exist
+- Accidental accumulation over time
+
+**Decision Required:** Verify which explanation is correct before finalizing M0 rotation approach.
+
+**If Hypothesis A (preferences) â†’ Consider separate M0 pool**
+**If Hypothesis B or C â†’ Include M0 in unified weighted rotation**
+
+---
+
+## PART 5: WEEKEND ROTATION CONSIDERATIONS
+
+### 5.1 Weekend Pool Participation
+
+**From earlier analysis (June-Dec 2025 data), weekend assignments showed:**
+- Some radiologists: 14-16 weekends
+- Others: 5 weekends
+- Suggests possible part-time or preference-based patterns
+
+**Question for Implementation:**
+- Are Karen Yuan, Kriti Rishi, Yonatan Rotman (low weekend counts) part-time?
+- Should weekend pool be reduced to 12 radiologists vs 15?
+- Or should fair rotation balance all 15 equally?
+
+**Recommendation:** Verify FTE status before configuring weekend pool.
+
+---
+
+## PART 6: TOTAL WORKLOAD COMPARISON
+
+### 6.1 General + Subspecialty Combined
+
+**Estimated Total Workload (General Rotation + Subspecialty):**
+```
+Radiologist         General  Subspecialty   Total   Notes
+â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+John Johnson         127.2      73 cardiac  ~200    Highest total
+Derrick Allen          0.25    106 IR       ~150    IR specialist
+                                 44 breast
+Eric Chou             87.5      minimal     ~90     M0-heavy pattern
+Rowena Tena           32.0      67 breast   ~100    Breast specialist
+Kriti Rishi           24.8      42 breast   ~67     Mammo specialist
+...
+```
+
+**Key Observations:**
+1. **John Johnson has highest TOTAL workload** (~200 assignments)
+2. **Derrick Allen is fully utilized in subspecialty** (~150 assignments)
+3. **Some radiologists do ONLY general rotation** (~60-90 assignments)
+
+**Fairness Question:**
+- Should total workload (general + subspecialty) be balanced?
+- Or is role differentiation (general vs specialist) intentional?
+
+**Recommendation:** 
+- Fair rotation balances GENERAL rotation workload
+- Subspecialty work is additive based on skills
+- BUT monitor total workload to prevent overload
+
+---
+
+## PART 7: CRITICAL QUESTIONS FOR DECISION-MAKING
+
+### Before Implementing Fair Rotation Engine:
+
+**Question 1: M0 Assignment Pattern**
+- Is Eric Chou's 53 M0s intentional (preference) or accidental?
+- Should M0 be in same pool as M1/M2/M3 or separate?
+
+**Question 2: FTE Status**
+- Which radiologists are full-time vs part-time?
+- Should part-timers have proportionally reduced assignments?
+
+**Question 3: Subspecialty + General Balance**
+- Should John Johnson's cardiac work "count against" general rotation?
+- How to balance total workload across specialists vs generalists?
+
+**Question 4: Weekend Pool**
+- Why do some radiologists have only 5 weekends vs others 14-16?
+- Is this FTE-based or preference-based?
+
+**Question 5: Outpatient Pool**
+- Confirm which 11 radiologists should be in general outpatient pool
+- Exclude subspecialists or include them at reduced rate?
+
+---
+
+## PART 8: FINAL RECOMMENDATIONS (UPDATED)
+
+### âœ… ADOPT Fair Rotation Engine For:
+
+**1. Inpatient Weekday (M0+M1+M2+M3) - URGENT**
+- Current CV: 50.8% (weighted) âŒ
+- Target CV: <10% âœ…
+- Pool: 14 radiologists
+- Configuration: Weighted cursor (M0=0.25Ã—, M1=1.0Ã—, M2=1.0Ã—, M3=0.75Ã—)
+- Reset cursor: 0 (fresh start)
+
+**Individual Shift Type Targets:**
+- M0: 71.7% â†’ <10% CV
+- M1: 78.3% â†’ <10% CV
+- M2: 74.9% â†’ <10% CV
+- M3: 33.4% â†’ <10% CV
+
+**2. Inpatient Weekend (M0/EP/LP) - HIGH PRIORITY**
+- Focus: Back-to-back weekend avoidance
+- Similar weighted approach
+- Cursor: Separate from weekday or unified (TBD)
+
+**3. Outpatient Rotations - MEDIUM PRIORITY**
+- Pool: 11 radiologists (exclude 4 subspecialists)
+- After inpatient stabilizes
+
+### âŒ DO NOT Use Fair Rotation For:
+
+**1. Breast/Mammography**
+- Keep manual skill-based assignment
+- 6 specialists appropriately cover volume
+- Explains low general outpatient for Rishi & Tena
+
+**2. Neuroradiology (Skull Base)**
+- Keep manual assignment
+- 3 specialists already balanced (33% each)
+- Already achieving target fairness
+
+**3. Cardiac Imaging**
+- Keep manual assignment
+- John Johnson primary (70%), Brian Trinh secondary (30%)
+- Monitor total workload (cardiac + general)
+
+**4. Interventional Radiology**
+- Dedicated specialist (Derrick Allen)
+- Fully utilized in IR + breast cross-training
+- Exclude from general rotation
+
+---
+
+## PART 9: EXPECTED IMPROVEMENTS
+
+### Quantitative Metrics (6-month projection):
+
+**Inpatient Weekday:**
+```
+Metric                 Current    Target    Improvement
+â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+Overall Weighted CV:    50.8%  â†’   <10%   â†’   -80%
+M0 CV:                  71.7%  â†’   <10%   â†’   -86%
+M1 CV:                  78.3%  â†’   <10%   â†’   -87%
+M2 CV:                  74.9%  â†’   <10%   â†’   -87%
+M3 CV:                  33.4%  â†’   <10%   â†’   -70%
+
+Weighted Range:         104    â†’    23    â†’   -78%
+Max/Min Ratio:         5.5:1  â†’   1.4:1  â†’   -75%
+```
+
+### Qualitative Benefits:
+
+**For Radiologists:**
+- Equal hours worked (not just equal shift count)
+- M0 distribution balanced (no more 53 vs 4)
+- M1 distribution balanced (no more 65 vs 2)
+- Transparent rotation position
+- Predictable schedules
+
+**For Practice:**
+- Defensible fairness metrics
+- Automated scheduling
+- Better retention
+- Reduced burnout risk
+
+---
+
+## CONCLUSION
+
+### The M0 Caveat Strengthened the Case
+
+**What the M0 weighted analysis revealed:**
+1. âœ… Problem is REAL (not measurement artifact)
+2. âœ… M0 shows WORST unfairness (72% CV)
+3. âœ… All shift types need help (M1: 78%, M2: 75%, M3: 33%)
+4. âœ… Weighted approach is correct (hours-based fairness)
+
+**Updated numbers, same conclusion:**
+- Weighted CV: 50.8% (vs 61.2% unweighted from old data)
+- Still 5Ã— worse than <10% target
+- Fair rotation engine STILL urgently needed
+- Expected improvement: 80% within 6 months
+
+**Implementation approach:**
+- Use weighted cursor advancement
+- M0: +0.25, M1: +1.0, M2: +1.0, M3: +0.75
+- Track fairness by hours, not shift count
+- Balance all shift types simultaneously
+
+**Subspecialty assignments remain appropriate:**
+- Breast/Mammo: Keep manual (skill-based) âœ…
+- Neuro/Skull: Keep manual (already fair) âœ…
+- Cardiac: Keep manual (John primary) âœ…
+- IR: Keep dedicated (Derrick only) âœ…
+
+---
+
+**Document Status:** This analysis updates the subspecialty review to incorporate M0 weighted findings. General rotation fairness analysis is revised with weighted metrics (50.8% CV). Subspecialty recommendations remain unchanged as these are skill-based assignments outside the fair rotation system.
+
+**Last Updated:** February 10, 2026
