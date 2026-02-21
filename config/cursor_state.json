@@ -1,8 +1,9 @@
 {
-  "weekday_cursor": 0,
-  "weekend_cursor": 0,
-  "ir_cursor": 0,
-  "last_updated": "2026-02-16T00:00:00",
-  "version": "1.0",
-  "notes": "Cursor positions track the infinite stream position for each rotation type"
+  "inpatient_weekday": 0,
+  "inpatient_weekend": 0,
+  "ir_weekday": 0,
+  "outpatient_remote": 0,
+  "outpatient_site": 0,
+  "last_updated": "2026-02-20",
+  "notes": "Reset to 0 to fix 47% CV imbalance. Increment keys mirror engine pool names."
 }

@@ -1,35 +1,45 @@
 """
-Export Layer for Fair Radiology Scheduling
+exporter.py — Export Layer for Fair Radiology Scheduling
 
-- Excel export with formatted schedule grid (dates × radiologists)
-- CSV export for programmatic review
-- Fairness audit report (per-radiologist counts, weighted workload, CV)
+Outputs:
+  - Excel (.xlsx): formatted date × shift grid with staff names
+  - CSV: flat (date, shift, staff) for programmatic review
+  - Fairness audit report (.txt): per-radiologist counts, weighted workload, CV
+    including per-shift breakdown (M0 CV, M1 CV, etc.)
 
-See docs/implementation_guide.md
+Usage:
+  from src.exporter import export_to_csv, export_to_excel, export_fairness_report
 """
 
+import logging
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
-# Type alias for schedule format: date_str -> [(shift_name, person_name)]
-ScheduleType = Dict[str, List[Tuple[str, str]]]
+logger = logging.getLogger(__name__)
 
+Schedule = Dict[str, List[Tuple[str, str]]]   # date_str → [(shift, name)]
+
+
+# ---------------------------------------------------------------------------
+# CSV Export
+# ---------------------------------------------------------------------------
 
 def export_to_csv(
-    schedule: ScheduleType,
+    schedule: Schedule,
     output_path: Path,
     include_shift: bool = True,
 ) -> None:
     """
-    Export schedule to CSV (date, shift, staff).
+    Export schedule to flat CSV: date, shift, staff.
 
     Args:
-        schedule: Dict[date_str, List[(shift_name, person_name)]]
-        output_path: Output file path
+        schedule:      {date_str: [(shift_name, person_name), ...]}
+        output_path:   .csv file path
         include_shift: If True, include shift column
     """
     import csv
     output_path.parent.mkdir(parents=True, exist_ok=True)
+
     with open(output_path, "w", newline="") as f:
         if include_shift:
             writer = csv.DictWriter(f, fieldnames=["date", "shift", "staff"])
@@ -41,69 +51,215 @@ def export_to_csv(
             writer = csv.DictWriter(f, fieldnames=["date", "staff"])
             writer.writeheader()
             for date_str, assignments in sorted(schedule.items()):
-                for _shift, person_name in assignments:
+                for _, person_name in assignments:
                     writer.writerow({"date": date_str, "staff": person_name})
 
+    logger.info(f"CSV exported → {output_path}")
+
+
+# ---------------------------------------------------------------------------
+# Excel Export
+# ---------------------------------------------------------------------------
 
 def export_to_excel(
-    schedule: ScheduleType,
+    schedule: Schedule,
     output_path: Path,
     pivot: bool = True,
+    shift_order: Optional[List[str]] = None,
 ) -> None:
     """
-    Export schedule to Excel with formatted grid.
+    Export schedule to formatted Excel grid.
+
+    Pivot mode (default): rows=date, columns=shift, cells=staff name.
+    Flat mode: rows=(date, shift, staff).
 
     Args:
-        schedule: Dict[date_str, List[(shift_name, person_name)]]
-        output_path: Output .xlsx path
-        pivot: If True, create date × shift grid with staff names
+        schedule:     {date_str: [(shift_name, person_name), ...]}
+        output_path:  .xlsx file path
+        pivot:        If True, create date × shift grid
+        shift_order:  Column order for pivot (defaults to appearance order)
     """
     import pandas as pd
+
     output_path.parent.mkdir(parents=True, exist_ok=True)
+
     rows = []
     for date_str, assignments in sorted(schedule.items()):
         for shift_name, person_name in assignments:
-            rows.append({"date": date_str, "shift": shift_name, "staff": person_name})
+            rows.append({"Date": date_str, "Shift": shift_name, "Staff": person_name})
+
     df = pd.DataFrame(rows)
+    if df.empty:
+        df.to_excel(output_path, index=False)
+        return
+
     if pivot:
-        grid = df.pivot_table(index="date", columns="shift", values="staff", aggfunc="first")
-        grid.to_excel(output_path)
+        # Pivot: Date × Shift → Staff name
+        grid = df.pivot_table(
+            index="Date",
+            columns="Shift",
+            values="Staff",
+            aggfunc=lambda x: "; ".join(x),  # handles multi-assign per cell
+        )
+        # Reorder columns if provided
+        if shift_order:
+            available = [s for s in shift_order if s in grid.columns]
+            rest = [s for s in grid.columns if s not in shift_order]
+            grid = grid[available + rest]
+
+        with pd.ExcelWriter(output_path, engine="openpyxl") as writer:
+            grid.to_excel(writer, sheet_name="Schedule")
+            _format_excel_grid(writer, "Schedule", grid)
     else:
         df.to_excel(output_path, index=False)
 
+    logger.info(f"Excel exported → {output_path}")
+
+
+def _format_excel_grid(writer: Any, sheet_name: str, grid: Any) -> None:
+    """Apply basic formatting to Excel grid: column widths, header bold."""
+    try:
+        from openpyxl.styles import Font, PatternFill, Alignment
+        ws = writer.sheets[sheet_name]
+        header_fill = PatternFill("solid", fgColor="1F4E79")
+        header_font = Font(bold=True, color="FFFFFF")
+
+        for cell in ws[1]:
+            cell.fill = header_fill
+            cell.font = header_font
+            cell.alignment = Alignment(horizontal="center")
+
+        for col in ws.columns:
+            max_len = max((len(str(c.value)) for c in col if c.value), default=8)
+            ws.column_dimensions[col[0].column_letter].width = min(max_len + 2, 30)
+
+        # Alternate row shading
+        from openpyxl.styles import PatternFill as PF
+        alt = PF("solid", fgColor="EBF3FB")
+        for i, row in enumerate(ws.iter_rows(min_row=2), start=2):
+            if i % 2 == 0:
+                for cell in row:
+                    cell.fill = alt
+
+    except Exception as e:
+        logger.warning(f"Excel formatting failed (non-critical): {e}")
+
+
+# ---------------------------------------------------------------------------
+# Fairness Report
+# ---------------------------------------------------------------------------
 
 def export_fairness_report(
     metrics: Dict[str, Any],
     output_path: Path,
     top_n: int = 3,
     bottom_n: int = 3,
+    pool_label: str = "",
+    target_cv: float = 10.0,
 ) -> None:
     """
-    Export fairness audit report (text format).
+    Export full fairness audit report (text format).
+
+    Includes:
+      - Overall CV, mean, std, min, max
+      - Per-radiologist weighted counts with deviation from mean
+      - Per-shift CV breakdown (M0 CV, M1 CV, etc.)
+      - Top/bottom N assigned
+      - UNFILLED slot count
+      - Pass/fail vs target CV
 
     Args:
-        metrics: From engine.calculate_fairness_metrics
-        output_path: Output .txt path
-        top_n: Number of most-assigned to highlight
-        bottom_n: Number of least-assigned to highlight
+        metrics:     Output of engine.calculate_fairness_metrics()
+        output_path: .txt file path
+        top_n:       Number of most-assigned to highlight
+        bottom_n:    Number of least-assigned to highlight
+        pool_label:  Label for the rotation pool (e.g. 'Mercy Weekday')
+        target_cv:   CV target (default 10.0%)
     """
     output_path.parent.mkdir(parents=True, exist_ok=True)
+
     wc = metrics.get("weighted_counts", metrics.get("counts", {}))
-    sorted_names = sorted(wc.keys(), key=lambda n: wc.get(n, 0), reverse=True)
+    rc = metrics.get("counts", {})
+    per_shift = metrics.get("per_shift", {})
+    per_shift_cv = metrics.get("per_shift_cv", {})
     mean_val = metrics.get("mean", 0)
     cv = metrics.get("cv", 0)
+    unfilled = metrics.get("unfilled", 0)
+
+    sorted_names = sorted(wc.keys(), key=lambda n: wc.get(n, 0), reverse=True)
+    pass_fail = "✓ PASS" if cv < target_cv else "✗ FAIL"
+
+    sep = "=" * 70
+
+    lines = [
+        sep,
+        f"  FAIRNESS AUDIT REPORT{(' — ' + pool_label) if pool_label else ''}",
+        sep,
+        "",
+        f"  Overall Weighted CV:   {cv:.2f}%  (target <{target_cv:.0f}%)  {pass_fail}",
+        f"  Mean weighted load:    {mean_val:.2f}",
+        f"  Std Dev:               {metrics.get('std', 0):.2f}",
+        f"  Min / Max:             {metrics.get('min', 0):.2f} / {metrics.get('max', 0):.2f}",
+        f"  Unfilled slots:        {unfilled}",
+        "",
+        "─" * 70,
+        "  Per-Radiologist Weighted Workload",
+        "─" * 70,
+        f"  {'Name':<24} {'Wt Load':>8} {'Raw Count':>10} {'% of Mean':>10}  {'Δ Mean':>8}",
+    ]
+
+    for name in sorted_names:
+        wt = wc.get(name, 0)
+        raw = rc.get(name, 0)
+        pct = (wt / mean_val * 100) if mean_val else 0
+        delta = wt - mean_val
+        flag = "  ← ↑ over" if delta > mean_val * 0.20 else ("  ← ↓ under" if delta < -mean_val * 0.20 else "")
+        lines.append(
+            f"  {name:<24} {wt:>8.2f} {raw:>10d} {pct:>9.1f}% {delta:>+9.2f}{flag}"
+        )
+
+    lines += [
+        "",
+        "─" * 70,
+        "  Per-Shift CV Breakdown",
+        "─" * 70,
+    ]
+
+    if per_shift_cv:
+        for shift_name, cv_val in sorted(per_shift_cv.items()):
+            flag = " ✗" if cv_val >= target_cv else " ✓"
+            lines.append(f"  {shift_name:<16} CV={cv_val:6.2f}%{flag}")
+    else:
+        lines.append("  (no per-shift breakdown available)")
+
+    lines += [
+        "",
+        "─" * 70,
+        "  Top Assigned",
+        "─" * 70,
+    ]
+    for name in sorted_names[:top_n]:
+        wt = wc.get(name, 0)
+        pct = (wt / mean_val * 100) if mean_val else 0
+        lines.append(f"  {name:<24} {wt:.2f} ({pct:.1f}% of mean)")
+
+    lines += [
+        "",
+        "─" * 70,
+        "  Bottom Assigned",
+        "─" * 70,
+    ]
+    for name in sorted_names[-bottom_n:][::-1]:
+        wt = wc.get(name, 0)
+        pct = (wt / mean_val * 100) if mean_val else 0
+        lines.append(f"  {name:<24} {wt:.2f} ({pct:.1f}% of mean)")
+
+    lines.append("")
+    lines.append(sep)
+
+    report_text = "\n".join(lines)
     with open(output_path, "w") as f:
-        f.write("=== Fairness Audit Report ===\n\n")
-        f.write(f"Mean (weighted): {mean_val:.2f}\n")
-        f.write(f"Std Dev: {metrics.get('std', 0):.2f}\n")
-        f.write(f"CV: {cv:.2f}% (target <10%)\n\n")
-        f.write("Top assigned:\n")
-        for name in sorted_names[:top_n]:
-            val = wc.get(name, 0)
-            pct = (val / mean_val * 100) if mean_val else 0
-            f.write(f"  {name}: {val:.2f} ({pct:.1f}% of mean)\n")
-        f.write("\nBottom assigned:\n")
-        for name in sorted_names[-bottom_n:][::-1]:
-            val = wc.get(name, 0)
-            pct = (val / mean_val * 100) if mean_val else 0
-            f.write(f"  {name}: {val:.2f} ({pct:.1f}% of mean)\n")
+        f.write(report_text)
+
+    logger.info(f"Fairness report exported → {output_path}")
+    return report_text
