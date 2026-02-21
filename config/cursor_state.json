@@ -1,9 +1,19 @@
 {
-  "inpatient_weekday": 0,
-  "inpatient_weekend": 0,
-  "ir_weekday": 0,
-  "outpatient_remote": 0,
-  "outpatient_site": 0,
-  "last_updated": "2026-02-20",
-  "notes": "Reset to 0 to fix 47% CV imbalance. Increment keys mirror engine pool names."
+  "gen_ir": 0.0,
+  "gen_nonir": 0.0,
+  "inpatient_weekday": 0.0,
+  "inpatient_weekend": 0.0,
+  "ir_call": 0.0,
+  "ir_weekday": 0.0,
+  "otoole": 0.0,
+  "remote_breast": 0.0,
+  "remote_mri": 0.0,
+  "remote_pet": 0.0,
+  "site_breast": 0.0,
+  "site_gen": 0.0,
+  "site_mri": 0.0,
+  "site_pet": 0.0,
+  "wknd_mri": 0.0,
+  "wknd_pet": 0.0,
+  "_last_updated": "2026-01-01"
 }

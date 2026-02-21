@@ -39,7 +39,7 @@ from src.skills import (
 )
 from src.exporter import export_to_csv, export_to_excel, export_fairness_report
 from src.schedule_config import (
-    INPATIENT_WEEKDAY_CONFIG, IR_WEEKDAY_CONFIG,
+    IR_WEEKDAY_CONFIG, M3_CONFIG as INPATIENT_WEEKDAY_CONFIG,
     SCHEDULING_BLOCKS, SHIFT_DEFINITIONS,
 )
 
@@ -101,7 +101,33 @@ class TestRosterValidation:
             assert p["fte"] > 0, f"{p['name']} has invalid FTE={p['fte']}"
 
     def test_mercy_pool_size(self, mercy_pool):
-        assert len(mercy_pool) == 19, f"Expected all 19 in mercy pool, got {len(mercy_pool)}"
+        # IR staff (DA, SS, SF, TR) are excluded from mercy — pool is 15
+        assert len(mercy_pool) == 15, f"Expected 15 in mercy pool (IR excluded), got {len(mercy_pool)}"
+
+    def test_ir_staff_not_in_mercy_pool(self, mercy_pool):
+        ir_initials = {"DA", "SS", "SF", "TR"}
+        mercy_initials = {p["initials"] for p in mercy_pool}
+        overlap = ir_initials & mercy_initials
+        assert not overlap, f"IR staff found in mercy pool: {overlap}"
+
+    def test_ir_staff_not_in_weekend_pool(self, roster):
+        weekend_pool = filter_pool(roster, "participates_weekend")
+        ir_initials = {"DA", "SS", "SF", "TR"}
+        weekend_initials = {p["initials"] for p in weekend_pool}
+        overlap = ir_initials & weekend_initials
+        assert not overlap, f"IR staff found in weekend pool: {overlap}"
+
+    def test_da_in_mg_pool(self, roster):
+        mg_pool = filter_pool(roster, "participates_mg")
+        mg_initials = {p["initials"] for p in mg_pool}
+        assert "DA" in mg_initials, "Derrick Allen should be in MG pool"
+
+    def test_non_ir_not_in_ir_pool(self, roster, ir_pool):
+        ir_initials = {p["initials"] for p in ir_pool}
+        expected_non_ir = {"BT", "EC", "EK", "EL", "GA", "JC", "JJ", "JV",
+                           "KY", "KR", "MS", "MB", "MG", "RT", "YR"}
+        overlap = expected_non_ir & ir_initials
+        assert not overlap, f"Non-IR staff found in IR pool: {overlap}"
 
     def test_ir_pool_size(self, ir_pool):
         assert len(ir_pool) == 4, f"Expected 4 IR radiologists, got {len(ir_pool)}"
@@ -136,8 +162,8 @@ class TestSubspecialtyParsing:
 
     def test_subspecialty_summary_covers_shifts(self, roster):
         summary = get_subspecialty_summary(roster)
-        # At minimum, 'ir', 'mri', 'Gen' should be present
-        for tag in ["ir", "mri", "Gen"]:
+        # At minimum, 'ir', 'MRI', 'Gen' should be present
+        for tag in ["ir", "MRI", "Gen"]:
             assert tag in summary, f"Tag '{tag}' not found in any radiologist's subspecialties"
 
     def test_shift_coverage_warnings(self, roster):
@@ -187,15 +213,18 @@ class TestBlockScheduling:
             assert "IR-2" in shift_names, f"{date_str}: IR-2 missing"
 
     def test_no_double_booking(self, roster, vacation_map, weekday_dates):
-        cursor_state = {"inpatient_weekday": 0.0, "ir_weekday": 0.0, "inpatient_weekend": 0.0}
+        from src.schedule_config import ALL_CURSOR_KEYS
+        cursor_state = {k: 0.0 for k in ALL_CURSOR_KEYS}
         schedule, _ = schedule_blocks(
             roster=roster, dates=weekday_dates,
             cursor_state=cursor_state, vacation_map=vacation_map, interactive=False,
         )
+        exclusive = {"M0","M1","M2","M3","IR-1","IR-2","IR-CALL","EP","Dx-CALL","M0_WEEKEND"}
         for date_str, assignments in schedule.items():
-            names = [name for _, name in assignments if name != "UNFILLED"]
-            dupes = [n for n in names if names.count(n) > 1]
-            assert not dupes, f"Double booking on {date_str}: {set(dupes)}"
+            excl_names = [name for shift, name in assignments
+                         if name != "UNFILLED" and shift in exclusive]
+            dupes = [n for n in excl_names if excl_names.count(n) > 1]
+            assert not dupes, f"Exclusive-shift double booking on {date_str}: {set(dupes)}"
 
 
 # ============================================================
@@ -206,7 +235,8 @@ class TestConstraintChecking:
 
     @pytest.fixture(scope="class")
     def schedule_and_checker(self, roster, vacation_map, weekday_dates, saturday_dates):
-        cursor_state = {"inpatient_weekday": 0.0, "ir_weekday": 0.0, "inpatient_weekend": 0.0}
+        from src.schedule_config import ALL_CURSOR_KEYS
+        cursor_state = {k: 0.0 for k in ALL_CURSOR_KEYS}
         schedule, _ = schedule_blocks(
             roster=roster, dates=weekday_dates,
             cursor_state=cursor_state, vacation_map=vacation_map,
@@ -214,6 +244,17 @@ class TestConstraintChecking:
         )
         checker = ConstraintChecker(roster=roster, vacation_map=vacation_map)
         return schedule, checker
+
+    @pytest.fixture(scope="class")
+    def schedule(self, roster, vacation_map, weekday_dates, saturday_dates):
+        from src.schedule_config import ALL_CURSOR_KEYS
+        cursor_state = {k: 0.0 for k in ALL_CURSOR_KEYS}
+        sched, _ = schedule_blocks(
+            roster=roster, dates=weekday_dates,
+            cursor_state=cursor_state, vacation_map=vacation_map,
+            interactive=False, weekend_dates=saturday_dates,
+        )
+        return sched
 
     def test_no_vacation_violations(self, schedule_and_checker):
         schedule, checker = schedule_and_checker
@@ -257,13 +298,14 @@ class TestFairnessMetrics:
 
     @pytest.fixture(scope="class")
     def metrics_fixture(self, roster, vacation_map, weekday_dates):
-        cursor_state = {"inpatient_weekday": 0.0, "ir_weekday": 0.0}
+        from src.schedule_config import ALL_CURSOR_KEYS
+        cursor_state = {k: 0.0 for k in ALL_CURSOR_KEYS}
         schedule, _ = schedule_blocks(
             roster=roster, dates=weekday_dates,
             cursor_state=cursor_state, vacation_map=vacation_map, interactive=False,
         )
         metrics = calculate_fairness_metrics(schedule, roster)
-        return metrics, roster
+        return metrics, schedule
 
     def test_metrics_keys_present(self, metrics_fixture):
         metrics, _ = metrics_fixture
@@ -287,14 +329,25 @@ class TestFairnessMetrics:
             "something is fundamentally broken in the cursor or pool logic."
         )
 
-    def test_all_radiologists_in_metrics(self, metrics_fixture):
-        metrics, roster = metrics_fixture
+    def test_all_radiologists_in_metrics(self, metrics_fixture, roster):
+        metrics, _ = metrics_fixture
         for p in roster:
             assert p["name"] in metrics["counts"], f"{p['name']} missing from metrics"
 
     def test_no_unfilled_slots(self, metrics_fixture):
-        metrics, _ = metrics_fixture
-        assert metrics["unfilled"] == 0, f"Unfilled slots: {metrics['unfilled']}"
+        """
+        Inpatient mercy + IR must always fill.
+        Outpatient subspecialty-gated slots may be UNFILLED when the pool
+        is small and all qualified staff are already assigned or on vacation.
+        """
+        metrics, schedule = metrics_fixture
+        mercy_ir = {"M0", "M1", "M2", "M3", "IR-1", "IR-2"}
+        hard_unfilled = [
+            (d, s, n) for d, assigns in schedule.items()
+            for s, n in assigns
+            if n == "UNFILLED" and s in mercy_ir
+        ]
+        assert not hard_unfilled, f"Inpatient/IR UNFILLED (must always fill): {hard_unfilled}"
 
     def test_per_shift_cv_present(self, metrics_fixture):
         metrics, _ = metrics_fixture

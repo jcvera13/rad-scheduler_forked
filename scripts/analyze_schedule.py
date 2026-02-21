@@ -71,6 +71,9 @@ SUBSPECIALTY_TASKS = [
     "Mercy Hospital IR-2",
     "PVH IR",
     "IR-CALL (RMG)",
+    "IR-1",
+    "IR-2",
+    "IR-CALL",
 ]
 
 # Tasks excluded from rotation for diagnostic-pool shift/hour charts (subspecialty + IHS weekend).
@@ -78,24 +81,46 @@ SUBSPECIALTY_TASKS = [
 IHS_WEEKEND_TASKS = [
     "Weekend IHS MRI",
     "Weekend IHS PET",
+    "Wknd-MRI",
+    "Wknd-PET",
 ]
 
 # Only these tasks count toward main shift and hours distributions (rotation charts).
 # Subspecialty rotations, IHS Weekend MRI/PET are excluded from these charts.
 MAIN_SHIFT_TASKS = [
-    "Mercy 1  (on site) 0800-1600 (M1 (on site) 0800-1600)",
-    "Mercy 2 (remote) 0930-1730 (M2 (remote) 0930-1730)",
-    "Mercy 3 (remote) 1600-2200 (M3 (remote) 1600-2200)",
-    "IHS Remote MRI (Remote MRI)",
-    "Mercy 0 (M0 (remote) 0700-0800, 1130-1230)",
-    "IHS Remote Breast & US (Remote Breast)",
-    "IHS Washington MRI x1080 (Wash MRI 0800-1700)",
-    "IHS Poway PET x1680 (Poway PET 0800-1700)",
-    "IHS Encinitas Breast & US x1581 (Enc Breast 0800-1700)",
-    "Scripps O'Toole Breast Center (O'Toole 0730-1630)",
+    "Mercy 1 (on site) 0800-1600 (M1 (on site) 0800-1600)", 
+    "Mercy 2 (remote) 0930-1730 (M2 (remote) 0930-1730)", 
+    "Mercy 3 (remote) 1600-2200 (M3 (remote) 1600-2200)", 
+    "IHS Remote MRI (Remote MRI)", "Mercy 0 (M0 (remote) 0700-0800, 1130-1230)", 
+    "IHS Remote Breast & US (Remote Breast)", 
+    "IHS Washington MRI x1080 (Wash MRI 0800-1700)", 
+    "IHS Poway PET x1680 (Poway PET 0800-1700)", 
+    "IHS Encinitas Breast & US x1581 (Enc Breast 0800-1700)", 
+    "Scripps O'Toole Breast Center (O'Toole 0730-1630)", 
     "Mercy 0 Weekend (M0 Weekend)",
-    "Early Person Call (on site Sat/remote Sun) (EP 0800-1430)",
-    "Late Person Call (remote) (Dx-CALL1400-2200)",
+    "Early Person Call (on site Sat/remote Sun) (EP 0800-1430)", 
+    "Late Person Call (remote) (Dx-CALL1400-2200)", 
+    "M0",
+    "M1",
+    "M2",
+    "M3",
+    "M0_WEEKEND",
+    "EP", 
+    "Dx-CALL",
+    "Remote-MRI", 
+    "Remote-Breast",
+    "Enc-Breast", 
+    "Enc-Gen", 
+    "Enc-MRI", 
+    "O'Toole", 
+    "Poway-Gen", 
+    "Poway-MRI", 
+    "Poway-PET",
+    "NC-Gen", 
+    "Wash-Breast", 
+    "Wash-MRI", 
+    "Remote-Gen",
+    "Remote-PET",
 ]
 
 
@@ -402,13 +427,18 @@ def load_generic(
             + df["Last Name"].astype(str).str.strip()
         )
     else:
-        # Staff as column headers – melt into long form
+        # Task names as column headers, cell values are staff names – melt into long form
         skip = {"Date", date_col, "Day", "Week", "Month"}
-        staff_cols = [c for c in df.columns if c not in skip and not c.startswith("Unnamed")]
-        df = df.melt(id_vars=["Date"], value_vars=staff_cols,
-                     var_name="Staff", value_name="Task")
-        df = df.dropna(subset=["Task"])
-        df = df[df["Task"].astype(str).str.strip().str.lower().isin(["", "nan", "off"]) == False]
+        task_cols = [c for c in df.columns if c not in skip and not c.startswith("Unnamed")]
+        df = df.melt(id_vars=["Date"], value_vars=task_cols,
+                     var_name="Task", value_name="Staff")
+        df = df.dropna(subset=["Staff"])
+        df = df[df["Staff"].astype(str).str.strip().str.lower().isin(["", "nan", "off"]) == False]
+        # Explode multi-staff cells like "Brian Trinh; Derrick Allen" into separate rows
+        df["Staff"] = df["Staff"].astype(str).str.split(r"\s*;\s*")
+        df = df.explode("Staff").reset_index(drop=True)
+        df["Staff"] = df["Staff"].str.strip()
+        df = df[df["Staff"].str.lower().isin(["", "nan"]) == False]
 
     if "Task" not in df.columns:
         df["Task"] = ""
@@ -1169,6 +1199,14 @@ class ScheduleAnalyzer:
             print(f"  Excluded from rotation (not in main shifts): {excluded_from_rotation:,} rows")
         print(f"\n  Rotation work rows (main shifts only): {len(df_rotation):,}")
         print(f"  Staff in scope     : {df_rotation['Staff'].nunique()}")
+
+        if df_rotation.empty:
+            print("\n✗ No rotation rows matched MAIN_SHIFT_TASKS.")
+            print("  Task names found in file:")
+            for t in sorted(df_work["Task"].unique()):
+                print(f"    • {t!r}")
+            print("\n  Add these task names to MAIN_SHIFT_TASKS in analyze_schedule.py to proceed.")
+            return False
 
         # Shift counts (rotation only)
         shift_counts = df_rotation["Staff"].value_counts().to_dict()

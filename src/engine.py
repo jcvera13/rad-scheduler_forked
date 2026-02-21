@@ -313,9 +313,10 @@ def schedule_blocks(
         schedule_type = config.get("schedule_type", "weekday")
         pool_filter = config.get("pool_filter")
         subspecialty_gate = block.get("subspecialty_gate")
+        exclude_ir = block.get("exclude_ir", False)
 
-        # Filter pool
-        pool = _filter_pool(roster, pool_filter, subspecialty_gate)
+        # Filter pool — exclude_ir is a hard gate for mercy/weekend blocks
+        pool = _filter_pool(roster, pool_filter, subspecialty_gate, exclude_ir=exclude_ir)
 
         if not pool:
             logger.warning(f"Block '{label}': empty pool after filter — skipping")
@@ -330,7 +331,13 @@ def schedule_blocks(
                 continue
 
         # Determine dates for this block
-        block_dates = weekend_dates if schedule_type == "weekend" and weekend_dates else dates
+        if schedule_type == "weekend":
+            if not weekend_dates:
+                logger.debug(f"Block '{label}': no weekend_dates — skipping")
+                continue
+            block_dates = weekend_dates
+        else:
+            block_dates = dates
         if not block_dates:
             logger.info(f"Block '{label}': no dates — skipping")
             continue
@@ -338,19 +345,24 @@ def schedule_blocks(
         cursor_key = config["cursor_key"]
         cursor = cursor_state.get(cursor_key, 0.0)
 
+        concurrent_ok = block.get("concurrent_ok", False)
+
         # Build augmented vacation map: existing vacation PLUS names already
         # assigned in earlier blocks on each date (prevents double-booking).
+        # Blocks with concurrent_ok=True bypass this (outpatient is concurrent
+        # with inpatient in the real schedule).
         augmented_vacation = {}
         for d in (vacation_map or {}):
             augmented_vacation[d] = list(vacation_map.get(d, []))
-        for date_str, prior_assignments in merged.items():
-            prior_names = [name for _, name in prior_assignments if name != "UNFILLED"]
-            if prior_names:
-                if date_str not in augmented_vacation:
-                    augmented_vacation[date_str] = []
-                augmented_vacation[date_str] = list(set(
-                    augmented_vacation.get(date_str, []) + prior_names
-                ))
+        if not concurrent_ok:
+            for date_str, prior_assignments in merged.items():
+                prior_names = [name for _, name in prior_assignments if name != "UNFILLED"]
+                if prior_names:
+                    if date_str not in augmented_vacation:
+                        augmented_vacation[date_str] = []
+                    augmented_vacation[date_str] = list(set(
+                        augmented_vacation.get(date_str, []) + prior_names
+                    ))
 
         block_schedule, new_cursor = schedule_period(
             people=pool,
@@ -462,11 +474,23 @@ def _filter_pool(
     roster: List[Dict[str, Any]],
     pool_filter: Optional[str],
     subspecialty_gate: Optional[str] = None,
+    exclude_ir: bool = False,
 ) -> List[Dict[str, Any]]:
-    """Filter roster by pool membership and optional subspecialty gate."""
+    """
+    Filter roster by pool membership and optional subspecialty gate.
+
+    Args:
+        pool_filter:      Roster key that must be True (e.g. 'participates_mercy').
+        subspecialty_gate: Required subspecialty tag (e.g. 'ir', 'MRI').
+        exclude_ir:       Hard-exclude participates_ir=True staff regardless of
+                          any other flag. Enforces that IR staff never appear in
+                          mercy/weekend blocks even if they share a gen pool key.
+    """
     result = roster
     if pool_filter:
         result = [p for p in result if p.get(pool_filter, False)]
+    if exclude_ir:
+        result = [p for p in result if not p.get("participates_ir", False)]
     if subspecialty_gate:
         gate = subspecialty_gate.lower()
         result = [
@@ -506,7 +530,7 @@ def get_weekday_dates(start: date, end: date) -> List[date]:
 
 
 def get_saturday_dates(start: date, end: date) -> List[date]:
-    """Return all Saturdays in [start, end] (each represents full weekend)."""
+    """Return all Saturdays in [start, end]."""
     out = []
     d = start
     while d <= end:
@@ -514,3 +538,47 @@ def get_saturday_dates(start: date, end: date) -> List[date]:
             out.append(d)
         d += timedelta(days=1)
     return out
+
+
+def get_weekend_dates(start: date, end: date) -> List[date]:
+    """
+    Return all Saturdays and Sundays in [start, end], interleaved in
+    chronological order (Sat, Sun, Sat, Sun, ...).
+
+    Passing this list as weekend_dates to schedule_blocks() causes the
+    cursor to advance after each day, so Saturday and Sunday are assigned
+    to DIFFERENT radiologists from the same eligible pool.  Shift types
+    are identical (EP, M0_WEEKEND, Dx-CALL, etc.); only personnel differ.
+    """
+    out = []
+    d = start
+    while d <= end:
+        if d.weekday() in (5, 6):   # Saturday=5, Sunday=6
+            out.append(d)
+        d += timedelta(days=1)
+    return out
+
+
+def expand_weekend_to_sunday(schedule: "Schedule") -> "Schedule":
+    """
+    DEPRECATED — replaced by get_weekend_dates().
+
+    Previously mirrored Saturday assignments onto Sunday (same personnel).
+    Now Sunday is scheduled independently via get_weekend_dates() so each
+    day gets distinct radiologists.  Kept for backward compatibility only.
+    """
+    import warnings
+    warnings.warn(
+        "expand_weekend_to_sunday() is deprecated. Pass get_weekend_dates() "
+        "as weekend_dates to schedule_blocks() instead.",
+        DeprecationWarning, stacklevel=2,
+    )
+    expanded = dict(schedule)
+    for date_str, assignments in list(schedule.items()):
+        d = date.fromisoformat(date_str)
+        if d.weekday() == 5:
+            sunday = d + timedelta(days=1)
+            sun_str = sunday.isoformat()
+            if sun_str not in expanded:
+                expanded[sun_str] = list(assignments)
+    return expanded

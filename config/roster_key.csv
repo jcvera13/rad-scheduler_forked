@@ -1,20 +1,20 @@
-id,index,initials,name,email,role,exempt_dates,fte,participates_mercy,participates_ir,participates_weekend,subspecialties,notes
-1,0,BT,Brian Trinh,,Radiologist,,1.0,yes,no,yes,"neuro,cardiac,nm,mri,Gen,Proc",
-2,1,DA,Derrick Allen,,Radiologist,,1.0,yes,yes,yes,"ir,mg,Gen",
-3,2,EC,Eric Chou,,Radiologist,,1.0,yes,no,yes,"mri,Gen",
-4,3,EK,Eric Kim,,Radiologist,,1.0,yes,no,yes,"pet,mg,Gen",
-5,4,EL,Eric Lizerbram,,Radiologist,,1.0,yes,no,yes,"mri,Gen",
-6,5,GA,Gregory Anderson,,Radiologist,,1.0,yes,no,yes,"mri,Gen",
-7,6,JC,James Cooper,,Radiologist,,1.0,yes,no,yes,"mg,mri,Gen,neuro",
-8,7,JJ,John Johnson,,Radiologist,,1.0,yes,no,yes,"mg,cardiac,Gen",
-9,8,JCV,JuanCarlos Vera,,Radiologist,,1.0,yes,no,yes,"neuro,nm,mri,Gen,Proc",
-10,9,KY,Karen Yuan,,Radiologist,,1.0,yes,no,yes,"mri,Gen,Proc",
-11,10,KR,Kriti Rishi,,Radiologist,,1.0,yes,no,yes,"mg,Gen",
-12,11,MS,Mark Schechter,,Radiologist,,1.0,yes,no,yes,"nm,Gen,mg",
-13,12,MB,Michael Booker,,Radiologist,,1.0,yes,no,yes,"mri,pet,Gen,Proc",
-14,13,MG,Michael Grant,,Radiologist,,1.0,yes,no,yes,"pet,Gen",
-15,14,RT,Rowena Tena,,Radiologist,,1.0,yes,no,yes,"mg,Gen",
-16,15,SS,Sharjeel Sabir,,Radiologist,,1.0,yes,yes,yes,"ir,Gen",
-17,16,SF,Sina Fartash,,Radiologist,,1.0,yes,yes,yes,"ir,Gen",
-18,17,TR,Ted Rothenberg,,Radiologist,,1.0,yes,yes,yes,"ir,Gen",
-19,18,YR,Yonatan Rotman,,Radiologist,,1.0,yes,no,yes,"pet,Gen",
+id,index,initials,name,email,role,exempt_dates,fte,participates_mercy,participates_ir,participates_weekend,participates_gen,participates_outpatient,participates_mg,subspecialties,notes
+1,0,BT,Brian Trinh,,Radiologist,,1.0,yes,no,yes,yes,yes,no,"neuro,cardiac,nm,MRI,Gen,Proc","Skull Base/Cardiac subspecialist"
+2,1,DA,Derrick Allen,,Radiologist,,1.0,no,yes,no,yes,yes,yes,"ir,MG,Gen","IR + MG/OToole + Gen; outpatient-eligible"
+3,2,EC,Eric Chou,,Radiologist,,1.0,yes,no,yes,yes,yes,no,"MRI,Gen",
+4,3,EK,Eric Kim,,Radiologist,,1.0,yes,no,yes,yes,yes,yes,"PET,MG,Gen",
+5,4,EL,Eric Lizerbram,,Radiologist,,1.0,yes,no,yes,yes,yes,no,"MRI,Gen",
+6,5,GA,Gregory Anderson,,Radiologist,,1.0,yes,no,yes,yes,yes,no,"MRI,Gen",
+7,6,JC,James Cooper,,Radiologist,,1.0,yes,no,yes,yes,yes,yes,"MG,MRI,Gen,neuro","Skull Base subspecialist"
+8,7,JJ,John Johnson,,Radiologist,,1.0,yes,no,yes,yes,yes,yes,"MG,Gen,cardiac","Cardiac primary"
+9,8,JV,JuanCarlos Vera,,Radiologist,,1.0,yes,no,yes,yes,yes,no,"neuro,nm,MRI,Gen,Proc","Skull Base subspecialist"
+10,9,KY,Karen Yuan,,Radiologist,,1.0,yes,no,yes,yes,yes,no,"MRI,Gen,Proc",
+11,10,KR,Kriti Rishi,,Radiologist,,1.0,yes,no,yes,yes,yes,yes,"MG,Gen",
+12,11,MS,Mark Schechter,,Radiologist,,1.0,yes,no,yes,yes,yes,yes,"nm,Gen,MG",
+13,12,MB,Michael Booker,,Radiologist,,1.0,yes,no,yes,yes,yes,no,"MRI,PET,Gen,Proc",
+14,13,MG,Michael Grant,,Radiologist,,1.0,yes,no,yes,yes,yes,no,"PET,Gen",
+15,14,RT,Rowena Tena,,Radiologist,,1.0,yes,no,yes,yes,yes,yes,"MG,Gen",
+16,15,SS,Sharjeel Sabir,,Radiologist,,1.0,no,yes,no,yes,no,no,"ir,Gen","IR only; no outpatient/mercy/weekend"
+17,16,SF,Sina Fartash,,Radiologist,,1.0,no,yes,no,yes,no,no,"ir,Gen","IR only; no outpatient/mercy/weekend"
+18,17,TR,Ted Rothenberg,,Radiologist,,1.0,no,yes,no,yes,no,no,"ir,Gen","IR only; no outpatient/mercy/weekend"
+19,18,YR,Yonatan Rotman,,Radiologist,,1.0,yes,no,yes,yes,yes,no,"PET,Gen",

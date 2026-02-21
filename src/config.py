@@ -29,12 +29,13 @@ DEFAULT_CURSOR_PATH    = DEFAULT_CONFIG_DIR / "cursor_state.json"
 # ---------------------------------------------------------------------------
 from src.schedule_config import (    # noqa: E402
     SHIFT_DEFINITIONS as DEFAULT_SHIFT_DEFINITIONS,
-    INPATIENT_WEEKDAY_CONFIG,
-    INPATIENT_WEEKEND_CONFIG,
-    IR_WEEKDAY_CONFIG,
     CONSTRAINT_WEIGHTS,
     FAIRNESS_TARGETS,
     SCHEDULING_BLOCKS,
+    M3_CONFIG   as INPATIENT_WEEKDAY_CONFIG,   # backwards compat aliases
+    WEEKEND_CONFIG as INPATIENT_WEEKEND_CONFIG,
+    IR_WEEKDAY_CONFIG,
+    normalize_task_name,
 )
 
 

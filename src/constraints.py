@@ -113,29 +113,45 @@ class ConstraintChecker:
     # HARD: Double-booking check
     # -----------------------------------------------------------------------
 
+    # Shifts that are EXCLUSIVE (a person can only hold one per day)
+    _exclusive_shifts: frozenset = frozenset({
+        "M0", "M1", "M2", "M3",
+        "IR-1", "IR-2", "IR-CALL", "PVH-IR",
+        "EP", "LP", "Dx-CALL", "M0_WEEKEND",
+    })
+
     def check_double_booking(self, schedule: Schedule) -> List[ConstraintViolation]:
-        """Hard: No radiologist assigned more than once on the same date."""
+        """
+        Hard: No radiologist assigned more than once on the same date
+        within exclusive shifts (inpatient + IR).
+
+        Outpatient and subspecialty assignments are CONCURRENT by design —
+        e.g. JJ does M1 + Cardiac, JC does Remote-MRI + Skull-Base.
+        Those are NOT flagged here.
+        """
         violations = []
         for date_str, assignments in schedule.items():
-            seen: Dict[str, str] = {}  # name → first shift
+            exclusive_seen: Dict[str, str] = {}   # name → first exclusive shift
             for shift_name, person_name in assignments:
                 if person_name == "UNFILLED":
                     continue
-                if person_name in seen:
+                if shift_name not in self._exclusive_shifts:
+                    continue   # outpatient / concurrent — skip
+                if person_name in exclusive_seen:
                     violations.append(ConstraintViolation(
                         severity=ConstraintSeverity.HARD,
                         constraint_type="DOUBLE_BOOKING",
                         description=(
-                            f"{person_name} assigned to both {seen[person_name]} "
-                            f"and {shift_name} on {date_str}"
+                            f"{person_name} assigned to exclusive shifts "
+                            f"{exclusive_seen[person_name]} AND {shift_name} on {date_str}"
                         ),
                         date=date_str,
                         staff=person_name,
                         shift=shift_name,
-                        details={"first_shift": seen[person_name]},
+                        details={"first_shift": exclusive_seen[person_name]},
                     ))
                 else:
-                    seen[person_name] = shift_name
+                    exclusive_seen[person_name] = shift_name
         return violations
 
     # -----------------------------------------------------------------------
@@ -161,8 +177,9 @@ class ConstraintChecker:
                 person = self._name_to_person.get(person_name)
                 if person is None:
                     continue
-                person_specs = set(s.lower() for s in person.get("subspecialties", []))
-                missing = required - person_specs
+                person_specs = {s.lower() for s in person.get("subspecialties", [])}
+                required_lower = {r.lower() for r in required}
+                missing = required_lower - person_specs
                 if missing:
                     violations.append(ConstraintViolation(
                         severity=ConstraintSeverity.HARD,

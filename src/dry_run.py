@@ -38,6 +38,7 @@ from src.engine import (
     calculate_fairness_metrics,
     get_weekday_dates,
     get_saturday_dates,
+    get_weekend_dates,
 )
 from src.constraints import ConstraintChecker
 from src.exporter import export_to_csv, export_to_excel, export_fairness_report
@@ -91,7 +92,7 @@ def run_dry_run(
 
     # ── 2. Validate inputs ─────────────────────────────────────────────────
     print("\nStep 2/6: Validating inputs...")
-    from src.schedule_config import SHIFT_DEFINITIONS, FAIRNESS_TARGETS
+    from src.schedule_config import SHIFT_DEFINITIONS, FAIRNESS_TARGETS, ALL_CURSOR_KEYS
 
     checker = ConstraintChecker(
         roster=roster,
@@ -121,12 +122,13 @@ def run_dry_run(
     print("\nStep 3/6: Building date lists...")
     weekday_dates  = get_weekday_dates(start_date, end_date)
     saturday_dates = get_saturday_dates(start_date, end_date)
+    weekend_dates  = get_weekend_dates(start_date, end_date)
     sat_strs       = [d.isoformat() for d in saturday_dates]
-    print(f"  ✓ {len(weekday_dates)} weekdays | {len(saturday_dates)} weekend Saturdays")
+    print(f"  ✓ {len(weekday_dates)} weekdays | {len(saturday_dates)} weekends ({len(weekend_dates)} Sat+Sun days)")
 
     # ── 4. Block scheduling ────────────────────────────────────────────────
     print("\nStep 4/6: Running block scheduling...")
-    print("  Block order: IR-1/IR-2 → M3 → M0 → M1/M2 → Weekend")
+    print("  Block order: IR → Mercy → Gen → Remote → Site → O\'Toole → Weekend")
 
     full_schedule, cursor_state = schedule_blocks(
         roster=roster,
@@ -134,7 +136,7 @@ def run_dry_run(
         cursor_state=cursor_state,
         vacation_map=vacation_map,
         interactive=interactive,
-        weekend_dates=saturday_dates if saturday_dates else None,
+        weekend_dates=weekend_dates if weekend_dates else None,
     )
 
     total_assignments = sum(len(v) for v in full_schedule.values())
