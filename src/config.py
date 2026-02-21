@@ -5,7 +5,7 @@ Loads roster, vacation map, and cursor state.
 Re-exports schedule_config constants for backwards compatibility.
 
 Key fix: subspecialties column in roster_key.csv uses comma-separated
-unquoted values (e.g.  neuro,cardiac,nm,mri,Gen).
+unquoted values (e.g.  neuro,cardiac,nm,MRI,Gen).
 Old format was space-separated quoted strings — now normalized.
 """
 
@@ -52,9 +52,9 @@ def _parse_subspecialties(raw: Any) -> List[str]:
     """
     Robust parser for subspecialty strings.
     Handles:
-      - comma-separated:  "ir,mri,Gen"
-      - semicolon-sep:    "ir;mri;Gen"
-      - space-sep quoted: '"ir" "mri" "Gen"'  (old malformed CSV format)
+      - comma-separated:  "ir,MRI,Gen"
+      - semicolon-sep:    "ir;MRI;Gen"
+      - space-sep quoted: '"ir" "MRI" "Gen"'  (old malformed CSV format)
       - single value:     "ir"
     Returns lowercase-stripped list.
     """
@@ -67,7 +67,7 @@ def _parse_subspecialties(raw: Any) -> List[str]:
     # Strip outer quotes if any
     s = s.strip('"').strip("'")
 
-    # Replace space-separated quoted tokens: "ir" "mri" → irmriI
+    # Replace space-separated quoted tokens: "ir" "MRI" → ir,MRI
     s = re.sub(r'"\s+"', ",", s)
     s = re.sub(r'"\s*', "", s)
 
@@ -113,11 +113,14 @@ def load_roster(
             "email":               str(row.get("email", "") or ""),
             "role":                str(row.get("role", "Radiologist")),
             "fte":                 float(row.get("fte", 1.0)),
-            "participates_mercy":  _parse_yes_no(row.get("participates_mercy", "yes")),
-            "participates_ir":     _parse_yes_no(row.get("participates_ir", "no")),
-            "participates_weekend":_parse_yes_no(row.get("participates_weekend", "yes")),
-            "subspecialties":      _parse_subspecialties(row.get("subspecialties", "")),
-            "notes":               str(row.get("notes", "") or ""),
+            "participates_mercy":     _parse_yes_no(row.get("participates_mercy",     "yes")),
+            "participates_ir":        _parse_yes_no(row.get("participates_ir",        "no")),
+            "participates_weekend":   _parse_yes_no(row.get("participates_weekend",   "yes")),
+            "participates_gen":       _parse_yes_no(row.get("participates_gen",       "yes")),
+            "participates_outpatient":_parse_yes_no(row.get("participates_outpatient","yes")),
+            "participates_mg":        _parse_yes_no(row.get("participates_mg",        "no")),
+            "subspecialties":         _parse_subspecialties(row.get("subspecialties", "")),
+            "notes":                  str(row.get("notes", "") or ""),
         }
 
         # Parse exempt_dates (semicolon-separated YYYY-MM-DD)

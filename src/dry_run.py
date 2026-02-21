@@ -1,18 +1,18 @@
 """
-Dry Run Mode - Safe Schedule Validation
+dry_run.py — Safe Schedule Validation (No QGenda Push)
 
-Run full schedule generation WITHOUT pushing to QGenda.
-Output to outputs/ directory. NEVER push unless --live flag explicitly set.
-
-Outputs:
-- Proposed schedule (Excel, CSV)
-- Fairness report (counts, CV%, top/bottom 3)
-- Constraint violation report
-- Optional: comparison vs historical actuals from qgenda_cleaned.csv
+Full orchestration:
+  1. Load roster, vacation map, cursor state
+  2. Validate inputs (roster structure, IR pool size, shift coverage)
+  3. Run block scheduling (IR → M3 → M0 → M1/M2 → weekend)
+  4. Check constraints (hard + soft)
+  5. Calculate fairness metrics
+  6. Export CSV, Excel, fairness report, violations report
+  7. Print summary to console
 
 Usage:
-  python -m src.dry_run --start 2026-03-01 --end 2026-06-30
-  python -m src.dry_run --start 2026-03-01 --end 2026-06-30 --live  # Still dry-run; --live reserved for future
+  python -m src.dry_run --start 2026-03-01 --end 2026-05-31
+  python -m src.dry_run --start 2026-03-01 --end 2026-05-31 --interactive
 """
 
 import argparse
@@ -20,9 +20,8 @@ import logging
 import sys
 from datetime import date, datetime, timedelta
 from pathlib import Path
-from typing import Dict
+from typing import Dict, List, Optional
 
-# Ensure we can import from src
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
@@ -31,189 +30,252 @@ from src.config import (
     load_roster,
     load_vacation_map,
     load_cursor_state,
+    save_cursor_state,
     filter_pool,
-    INPATIENT_WEEKDAY_CONFIG,
-    INPATIENT_WEEKEND_CONFIG,
 )
 from src.engine import (
-    schedule_weekday_mercy,
-    schedule_weekend_mercy,
+    schedule_blocks,
     calculate_fairness_metrics,
+    get_weekday_dates,
+    get_saturday_dates,
 )
+from src.constraints import ConstraintChecker
 from src.exporter import export_to_csv, export_to_excel, export_fairness_report
-from src.constraints import ConstraintChecker, ConstraintSeverity
+from src.skills import get_subspecialty_summary, validate_shift_coverage
 
-logging.basicConfig(level=logging.INFO)
+logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s: %(message)s")
 logger = logging.getLogger(__name__)
 
 OUTPUTS_DIR = PROJECT_ROOT / "outputs"
 
 
-def get_weekday_dates(start: date, end: date):
-    """Monday-Friday in range"""
-    dates = []
-    d = start
-    while d <= end:
-        if d.weekday() < 5:
-            dates.append(d)
-        d += timedelta(days=1)
-    return dates
-
-
-def get_weekend_saturday_dates(start: date, end: date):
-    """Saturdays in range (each represents full weekend)"""
-    dates = []
-    d = start
-    while d <= end:
-        if d.weekday() == 5:  # Saturday
-            dates.append(d)
-        d += timedelta(days=1)
-    return dates
-
+# ---------------------------------------------------------------------------
+# Main orchestrator
+# ---------------------------------------------------------------------------
 
 def run_dry_run(
     start_date: date,
     end_date: date,
     output_dir: Path = OUTPUTS_DIR,
+    interactive: bool = False,
+    save_cursors: bool = False,
 ) -> Dict:
     """
-    Generate schedule in dry-run mode. No QGenda push.
+    Generate full schedule in dry-run mode (never pushes to QGenda).
 
-    Returns dict with schedule, metrics, violations, output paths.
+    Args:
+        start_date:   First date to schedule
+        end_date:     Last date to schedule
+        output_dir:   Directory for output files
+        interactive:  If True, prompt user before each block
+        save_cursors: If True, persist updated cursor state to disk
+
+    Returns:
+        Dict with schedule, metrics, violations, output paths
     """
     output_dir.mkdir(parents=True, exist_ok=True)
-    ts = datetime.now().strftime("%Y%m%d_%H%M%S")
-    prefix = f"dry_run_{start_date.isoformat()}_{end_date.isoformat()}_{ts}"
+    prefix = f"dry_run_{start_date}_{end_date}"
+    sep = "=" * 70
 
-    # Load config
-    roster = load_roster()
-    vacation_map = load_vacation_map()
-    cursors = load_cursor_state()
+    print(f"\n{sep}")
+    print(f"  DRY RUN MODE — No data pushed to QGenda")
+    print(f"  Period: {start_date} → {end_date}")
+    print(f"{sep}\n")
 
-    mercy_pool = filter_pool(roster, INPATIENT_WEEKDAY_CONFIG["pool_filter"])
-    weekend_pool = filter_pool(roster, INPATIENT_WEEKEND_CONFIG.get("pool_filter", "participates_weekend"))
-    if not weekend_pool:
-        weekend_pool = mercy_pool  # Fallback
+    # ── 1. Load configuration ──────────────────────────────────────────────
+    print("Step 1/6: Loading configuration...")
+    roster         = load_roster()
+    vacation_map   = load_vacation_map()
+    cursor_state   = load_cursor_state()
+    print(f"  ✓ {len(roster)} radiologists | {len(vacation_map)} vacation dates | cursors: {cursor_state}")
 
-    # Schedule weekday Mercy
-    weekday_dates = get_weekday_dates(start_date, end_date)
-    wd_schedule, wd_cursor = schedule_weekday_mercy(
-        people=mercy_pool,
+    # ── 2. Validate inputs ─────────────────────────────────────────────────
+    print("\nStep 2/6: Validating inputs...")
+    from src.schedule_config import SHIFT_DEFINITIONS, FAIRNESS_TARGETS
+
+    checker = ConstraintChecker(
+        roster=roster,
+        vacation_map=vacation_map,
+        shift_definitions=SHIFT_DEFINITIONS,
+        fairness_targets=FAIRNESS_TARGETS,
+    )
+    roster_errors, roster_warnings = checker.validate_roster()
+    coverage_warnings = validate_shift_coverage(roster)
+    spec_summary = get_subspecialty_summary(roster)
+
+    for err in roster_errors:
+        print(f"  ✗ ROSTER ERROR: {err}")
+    for w in roster_warnings + coverage_warnings:
+        print(f"  ⚠ WARNING: {w}")
+
+    if roster_errors:
+        print("\n  ✗ Cannot proceed — fix roster errors above.")
+        sys.exit(1)
+
+    if not roster_errors and not roster_warnings:
+        print("  ✓ Roster valid")
+
+    print(f"  ✓ Subspecialty coverage: {len(spec_summary)} tags across roster")
+
+    # ── 3. Build date lists ────────────────────────────────────────────────
+    print("\nStep 3/6: Building date lists...")
+    weekday_dates  = get_weekday_dates(start_date, end_date)
+    saturday_dates = get_saturday_dates(start_date, end_date)
+    sat_strs       = [d.isoformat() for d in saturday_dates]
+    print(f"  ✓ {len(weekday_dates)} weekdays | {len(saturday_dates)} weekend Saturdays")
+
+    # ── 4. Block scheduling ────────────────────────────────────────────────
+    print("\nStep 4/6: Running block scheduling...")
+    print("  Block order: IR-1/IR-2 → M3 → M0 → M1/M2 → Weekend")
+
+    full_schedule, cursor_state = schedule_blocks(
+        roster=roster,
         dates=weekday_dates,
-        cursor=cursors.get("weekday_cursor", 0),
+        cursor_state=cursor_state,
         vacation_map=vacation_map,
+        interactive=interactive,
+        weekend_dates=saturday_dates if saturday_dates else None,
     )
 
-    # Schedule weekend Mercy
-    sat_dates = get_weekend_saturday_dates(start_date, end_date)
-    we_schedule, we_cursor = schedule_weekend_mercy(
-        people=weekend_pool,
-        saturday_dates=sat_dates,
-        cursor=cursors.get("weekend_cursor", 0),
-        vacation_map=vacation_map,
+    total_assignments = sum(len(v) for v in full_schedule.values())
+    print(f"  ✓ {total_assignments} total assignments across {len(full_schedule)} dates")
+
+    if save_cursors:
+        save_cursor_state(cursor_state)
+        print(f"  ✓ Cursors saved: {cursor_state}")
+
+    # ── 5. Constraint checking ─────────────────────────────────────────────
+    print("\nStep 5/6: Checking constraints...")
+    metrics = calculate_fairness_metrics(full_schedule, roster)
+
+    hard_violations, soft_violations = checker.check_all(
+        schedule=full_schedule,
+        weekend_dates=sat_strs or None,
+        metrics=metrics,
+        pool_label="Full Schedule",
     )
 
-    # Merge schedules for reporting
-    all_schedule = dict(wd_schedule)
-    all_schedule.update(we_schedule)
+    h_count = len(hard_violations)
+    s_count = len(soft_violations)
+    cv_pct  = metrics["cv"]
+    status  = "✓" if h_count == 0 else "✗"
+    cv_icon = "✓" if cv_pct < 10.0 else "✗"
 
-    # Fairness metrics (combine both)
-    combined_assignments = {}
-    for dt, assignments in all_schedule.items():
-        combined_assignments[dt] = assignments
-    metrics = calculate_fairness_metrics(combined_assignments, roster)
+    print(f"  {status} Hard violations: {h_count}")
+    print(f"    Soft violations: {s_count}")
+    print(f"  {cv_icon} Weighted CV: {cv_pct:.2f}% (target <10%)")
 
-    # Constraint check
-    checker = ConstraintChecker(roster, vacation_map)
-    weekend_date_strs = [d.strftime("%Y-%m-%d") for d in sat_dates]
-    hard_violations, soft_violations = checker.check_all(all_schedule, weekend_date_strs)
+    # ── 6. Export ──────────────────────────────────────────────────────────
+    print("\nStep 6/6: Exporting outputs...")
 
-    # Export
-    csv_path = output_dir / f"{prefix}_schedule.csv"
-    xlsx_path = output_dir / f"{prefix}_schedule.xlsx"
-    report_path = output_dir / f"{prefix}_fairness_report.txt"
+    csv_path        = output_dir / f"{prefix}_schedule.csv"
+    xlsx_path       = output_dir / f"{prefix}_schedule.xlsx"
+    report_path     = output_dir / f"{prefix}_fairness_report.txt"
     violations_path = output_dir / f"{prefix}_violations.txt"
 
-    export_to_csv(all_schedule, csv_path, include_shift=True)
-    export_to_excel(all_schedule, xlsx_path, pivot=True)
-    export_fairness_report(metrics, report_path, top_n=3, bottom_n=3)
+    export_to_csv(full_schedule, csv_path, include_shift=True)
+    export_to_excel(
+        full_schedule, xlsx_path, pivot=True,
+        shift_order=["IR-1", "IR-2", "M0", "M1", "M2", "M3",
+                     "M0_WEEKEND", "EP", "LP", "Dx-CALL"]
+    )
+    export_fairness_report(
+        metrics, report_path,
+        pool_label="Full Rotation Schedule",
+        target_cv=10.0,
+        top_n=5, bottom_n=5,
+    )
 
+    # Violations report
     with open(violations_path, "w") as f:
         f.write("=== Constraint Violations ===\n\n")
-        f.write(f"Hard: {len(hard_violations)}\n")
+        f.write(f"HARD ({h_count}):\n")
         for v in hard_violations:
-            f.write(f"  - {v.description}\n")
-        f.write(f"\nSoft: {len(soft_violations)}\n")
+            f.write(f"  {v}\n")
+        f.write(f"\nSOFT ({s_count}):\n")
         for v in soft_violations:
-            f.write(f"  - {v.description}\n")
+            f.write(f"  {v}\n")
 
-    # Print summary
-    total_assignments = sum(len(a) for a in all_schedule.values())
-    sorted_counts = sorted(
-        metrics.get("weighted_counts", metrics.get("counts", {})).items(),
-        key=lambda x: x[1],
-        reverse=True,
-    )
-    top3 = sorted_counts[:3]
-    bottom3 = sorted_counts[-3:][::-1]
+    print(f"  ✓ CSV:       {csv_path.name}")
+    print(f"  ✓ Excel:     {xlsx_path.name}")
+    print(f"  ✓ Report:    {report_path.name}")
+    print(f"  ✓ Violations:{violations_path.name}")
 
-    print("\n" + "=" * 60)
-    print("DRY RUN SUMMARY (no data pushed to QGenda)")
-    print("=" * 60)
-    print(f"Date range: {start_date} to {end_date}")
-    print(f"Total assignments: {total_assignments}")
-    print(f"CV%: {metrics.get('cv', 0):.2f}% (target <10%)")
-    print(f"\nTop 3 assigned:")
-    for name, count in top3:
-        print(f"  {name}: {count:.2f}" if isinstance(count, float) else f"  {name}: {count}")
-    print(f"\nBottom 3 assigned:")
-    for name, count in bottom3:
-        print(f"  {name}: {count:.2f}" if isinstance(count, float) else f"  {name}: {count}")
-    print(f"\nConstraint violations: {len(hard_violations)} hard, {len(soft_violations)} soft")
-    print(f"\nOutputs written to: {output_dir}")
-    print(f"  - {csv_path.name}")
-    print(f"  - {xlsx_path.name}")
-    print(f"  - {report_path.name}")
-    print(f"  - {violations_path.name}")
-    print("=" * 60 + "\n")
+    # ── Summary ────────────────────────────────────────────────────────────
+    print(f"\n{sep}")
+    print("  SUMMARY")
+    print(f"{sep}")
+    print(f"  Period:            {start_date} → {end_date}")
+    print(f"  Total assignments: {total_assignments}")
+    print(f"  Unfilled slots:    {metrics['unfilled']}")
+    print(f"  Weighted CV:       {cv_pct:.2f}%  {cv_icon}")
+    print(f"  Hard violations:   {h_count}  {status}")
+    print(f"  Soft violations:   {s_count}")
+
+    wc = metrics["weighted_counts"]
+    sorted_wc = sorted(wc.items(), key=lambda x: x[1], reverse=True)
+    print(f"\n  Top 3 assigned (weighted):")
+    for name, val in sorted_wc[:3]:
+        print(f"    {name:<24} {val:.2f}")
+    print(f"\n  Bottom 3 assigned (weighted):")
+    for name, val in sorted_wc[-3:][::-1]:
+        print(f"    {name:<24} {val:.2f}")
+
+    print(f"\n  Per-shift CV:")
+    for shift, cv_val in sorted(metrics.get("per_shift_cv", {}).items()):
+        icon = "✓" if cv_val < 10.0 else "✗"
+        print(f"    {shift:<16} {cv_val:6.2f}%  {icon}")
+
+    print(f"\n{sep}\n")
 
     return {
-        "schedule": all_schedule,
-        "metrics": metrics,
+        "schedule":        full_schedule,
+        "metrics":         metrics,
         "hard_violations": hard_violations,
         "soft_violations": soft_violations,
+        "cursor_state":    cursor_state,
         "outputs": {
-            "csv": csv_path,
-            "excel": xlsx_path,
-            "report": report_path,
+            "csv":        csv_path,
+            "excel":      xlsx_path,
+            "report":     report_path,
             "violations": violations_path,
         },
     }
 
 
+# ---------------------------------------------------------------------------
+# CLI entry point
+# ---------------------------------------------------------------------------
+
 def main():
-    parser = argparse.ArgumentParser(description="Dry run schedule generation (no QGenda push)")
-    parser.add_argument("--start", required=True, help="Start date YYYY-MM-DD")
-    parser.add_argument("--end", required=True, help="End date YYYY-MM-DD")
-    parser.add_argument("--output-dir", default=None, help="Output directory (default: outputs/)")
-    parser.add_argument("--live", action="store_true", help="Reserved for future: push to QGenda (currently no-op)")
+    parser = argparse.ArgumentParser(
+        description="Dry-run schedule generation (no QGenda push)"
+    )
+    parser.add_argument("--start",        required=True, help="Start date YYYY-MM-DD")
+    parser.add_argument("--end",          required=True, help="End date YYYY-MM-DD")
+    parser.add_argument("--output-dir",   default=None,  help="Output directory (default: outputs/)")
+    parser.add_argument("--interactive",  action="store_true", help="Prompt before each block")
+    parser.add_argument("--save-cursors", action="store_true", help="Persist cursor state after run")
     args = parser.parse_args()
 
     try:
         start = datetime.strptime(args.start, "%Y-%m-%d").date()
-        end = datetime.strptime(args.end, "%Y-%m-%d").date()
+        end   = datetime.strptime(args.end,   "%Y-%m-%d").date()
     except ValueError as e:
         print(f"Invalid date format: {e}")
         sys.exit(1)
 
     if start > end:
-        print("Start date must be before end date")
+        print("Error: start date must be before end date")
         sys.exit(1)
 
     out_dir = Path(args.output_dir) if args.output_dir else OUTPUTS_DIR
-    run_dry_run(start, end, output_dir=out_dir)
-    if args.live:
-        print("Note: --live is reserved for future QGenda push. No push performed in dry-run mode.")
+    run_dry_run(
+        start, end,
+        output_dir=out_dir,
+        interactive=args.interactive,
+        save_cursors=args.save_cursors,
+    )
 
 
 if __name__ == "__main__":

@@ -180,8 +180,7 @@ class ConstraintChecker:
 
     def check_ir_pool_gate(self, schedule: Schedule) -> List[ConstraintViolation]:
         """
-        Hard: IR shifts must only be assigned to radiologists in the IR pool
-        (participates_ir=True or has 'ir' in subspecialties).
+        Hard: IR shifts must only be assigned to IR-qualified radiologists.
         """
         violations = []
         for date_str, assignments in schedule.items():
@@ -197,6 +196,62 @@ class ConstraintChecker:
                         description=(
                             f"{person_name} assigned to {shift_name} "
                             f"but is NOT in the IR-qualified pool"
+                        ),
+                        date=date_str,
+                        staff=person_name,
+                        shift=shift_name,
+                    ))
+        return violations
+
+    def check_mercy_pool_gate(self, schedule: Schedule) -> List[ConstraintViolation]:
+        """
+        Hard: M0/M1/M2/M3 must NOT be assigned to IR staff.
+        IR staff (DA, SS, SF, TR) are excluded from mercy rotation.
+        """
+        mercy_shifts = {"M0", "M1", "M2", "M3"}
+        violations = []
+        for date_str, assignments in schedule.items():
+            for shift_name, person_name in assignments:
+                if shift_name not in mercy_shifts:
+                    continue
+                if person_name == "UNFILLED":
+                    continue
+                person = self._name_to_person.get(person_name)
+                if person and person.get("participates_ir", False):
+                    violations.append(ConstraintViolation(
+                        severity=ConstraintSeverity.HARD,
+                        constraint_type="MERCY_POOL_GATE",
+                        description=(
+                            f"{person_name} (IR staff) assigned to mercy shift {shift_name} — "
+                            f"IR staff are excluded from M0/M1/M2/M3"
+                        ),
+                        date=date_str,
+                        staff=person_name,
+                        shift=shift_name,
+                    ))
+        return violations
+
+    def check_weekend_pool_gate(self, schedule: Schedule) -> List[ConstraintViolation]:
+        """
+        Hard: EP/LP/Dx-CALL must NOT be assigned to IR staff.
+        IR staff are excluded from all weekend inpatient shifts.
+        """
+        weekend_shifts = {"EP", "LP", "Dx-CALL", "M0_WEEKEND"}
+        violations = []
+        for date_str, assignments in schedule.items():
+            for shift_name, person_name in assignments:
+                if shift_name not in weekend_shifts:
+                    continue
+                if person_name == "UNFILLED":
+                    continue
+                person = self._name_to_person.get(person_name)
+                if person and person.get("participates_ir", False):
+                    violations.append(ConstraintViolation(
+                        severity=ConstraintSeverity.HARD,
+                        constraint_type="WEEKEND_POOL_GATE",
+                        description=(
+                            f"{person_name} (IR staff) assigned to weekend shift {shift_name} — "
+                            f"IR staff are excluded from EP/LP/Dx-CALL"
                         ),
                         date=date_str,
                         staff=person_name,
@@ -311,6 +366,8 @@ class ConstraintChecker:
         hard.extend(self.check_double_booking(schedule))
         hard.extend(self.check_subspecialty_qualification(schedule))
         hard.extend(self.check_ir_pool_gate(schedule))
+        hard.extend(self.check_mercy_pool_gate(schedule))
+        hard.extend(self.check_weekend_pool_gate(schedule))
         soft.extend(self.check_unfilled(schedule))
 
         if weekend_dates:
