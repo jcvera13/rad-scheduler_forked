@@ -168,7 +168,7 @@ SHIFT_DEFINITIONS: Dict[str, Dict[str, Any]] = {
                     "description": "IHS Remote PET"},
 
     # ── Washington site ───────────────────────────────────────────────────────
-    "Wash-MRI":    {"hours": 8,   "weight": 1.00, "pool": "mri",     "requires": "MRI",
+    "Wash-MRI":    {"hours": 8,   "weight": 1.00, "pool": "mri",     "requires": "MRI+Proc",
                     "description": "IHS Washington MRI 0800-1700"},
     "Wash-Breast": {"hours": 8,   "weight": 1.00, "pool": "breast",  "requires": "MG",
                     "description": "IHS Washington Breast & US 0800-1700"},
@@ -314,7 +314,7 @@ def _outpt_cfg(shift_names, weights, cursor_key, subspecialty, schedule_type="we
 IR_WEEKDAY_CONFIG         = _ir_cfg(["IR-1","IR-2"], {"IR-1":1.00,"IR-2":1.00})
 IR_CALL_CONFIG            = _ir_cfg(["IR-CALL"],     {"IR-CALL":1.00}, "ir_call")
 
-M3_CONFIG  = _mercy_cfg(["M3"],     {"M3":0.75})
+M3_CONFIG  = _mercy_cfg(["M3"],     {"M3":1.00})
 M0_CONFIG  = _mercy_cfg(["M0"],     {"M0":0.25})
 M1M2_CONFIG= _mercy_cfg(["M1","M2"],{"M1":1.00,"M2":1.00}, n_per_day=2)
 
@@ -345,7 +345,7 @@ POWAY_MRI_CONFIG = _outpt_cfg(["Poway-MRI"],{"Poway-MRI":1.00},"site_mri", "mri"
 WASH_BREAST_CONFIG  = _outpt_cfg(["Wash-Breast"], {"Wash-Breast":1.00}, "site_breast","mg",
                                   exclude_ir=False)  # DA eligible
 ENC_BREAST_CONFIG   = _outpt_cfg(["Enc-Breast"],  {"Enc-Breast":1.00},  "site_breast","mg",
-                                  exclude_ir=True)   # DA not on this one in data
+                                  exclude_ir=False)   # DA eligible
 POWAY_BREAST_CONFIG = _outpt_cfg(["NC-Breast"],   {"NC-Breast":1.00},   "site_breast","mg",
                                   exclude_ir=True)
 
@@ -414,115 +414,115 @@ SCHEDULING_BLOCKS: List[Dict[str, Any]] = [
      "can_skip": False, "exclude_ir": True,
      "interactive_prompt": "Schedule M1 and M2?"},
 
-    # ── 6. Gen (non-IR staff) ────────────────────────────────────────────────
-    {"block_id": "gen_nonir", "label": "Remote Gen (non-IR)",
-     "config": GEN_NONIR_CONFIG, "priority": 6,
-     "can_skip": True, "exclude_ir": True, "concurrent_ok": True,
-     "interactive_prompt": "Schedule Gen diagnostic (non-IR staff)?"},
-
-    # ── 7. Gen (IR staff) ─────────────────────────────────────────────────────
-    {"block_id": "gen_ir", "label": "Remote Gen (IR staff)",
-     "config": GEN_IR_CONFIG, "priority": 7,
-     "can_skip": True, "exclude_ir": False,
-     "concurrent_ok": True,
-     "interactive_prompt": "Schedule Gen diagnostic (IR staff)?"},
-
-    # ── 8. Remote outpatient ─────────────────────────────────────────────────
-    {"block_id": "remote_mri", "label": "Remote MRI",
-     "config": REMOTE_MRI_CONFIG, "priority": 8,
-     "can_skip": True, "exclude_ir": True,
-     "subspecialty_gate": "mri",
-     "concurrent_ok": True,
-     "interactive_prompt": "Schedule Remote MRI?"},
-
-    {"block_id": "remote_breast", "label": "Remote Breast",
-     "config": REMOTE_BREAST_CONFIG, "priority": 9,
+    # ── 6. O'Toole (Tue/Wed/Fri) ────────────────────────────────────────────
+    {"block_id": "otoole", "label": "O'Toole",
+     "config": OTOOLE_CONFIG, "priority": 6,
      "can_skip": True, "exclude_ir": False,  # DA eligible
      "subspecialty_gate": "mg",
      "concurrent_ok": True,
-     "interactive_prompt": "Schedule Remote Breast?"},
-
-    {"block_id": "remote_pet", "label": "Remote PET",
-     "config": REMOTE_PET_CONFIG, "priority": 10,
-     "can_skip": True, "exclude_ir": True,
-     "subspecialty_gate": "pet",
-     "concurrent_ok": True,
-     "interactive_prompt": "Schedule Remote PET?"},
-
-    # ── 9. Site-based MRI ────────────────────────────────────────────────────
-    {"block_id": "wash_mri", "label": "Washington MRI",
-     "config": WASH_MRI_CONFIG, "priority": 11,
-     "can_skip": True, "exclude_ir": True,
-     "subspecialty_gate": "mri",
-     "concurrent_ok": True,
-     "interactive_prompt": "Schedule Washington MRI?"},
-
-    {"block_id": "enc_mri", "label": "Encinitas MRI",
-     "config": ENC_MRI_CONFIG, "priority": 12,
-     "can_skip": True, "exclude_ir": True,
-     "subspecialty_gate": "mri",
-     "concurrent_ok": True,
-     "interactive_prompt": "Schedule Encinitas MRI?"},
-
-    {"block_id": "poway_mri", "label": "Poway MRI",
-     "config": POWAY_MRI_CONFIG, "priority": 13,
-     "can_skip": True, "exclude_ir": True,
-     "subspecialty_gate": "mri",
-     "concurrent_ok": True,
-     "interactive_prompt": "Schedule Poway MRI?"},
-
-    # ── 10. Site-based Breast ─────────────────────────────────────────────────
+     "interactive_prompt": "Schedule O'Toole?"},
+     
+    # ── 7. Site-based Breast ─────────────────────────────────────────────────
     {"block_id": "wash_breast", "label": "Washington Breast",
-     "config": WASH_BREAST_CONFIG, "priority": 14,
+     "config": WASH_BREAST_CONFIG, "priority": 7,
      "can_skip": True, "exclude_ir": False,  # DA eligible
      "subspecialty_gate": "mg",
      "concurrent_ok": True,
      "interactive_prompt": "Schedule Washington Breast?"},
 
     {"block_id": "enc_breast", "label": "Encinitas Breast",
-     "config": ENC_BREAST_CONFIG, "priority": 15,
+     "config": ENC_BREAST_CONFIG, "priority": 8,
      "can_skip": True, "exclude_ir": True,
      "subspecialty_gate": "mg",
      "concurrent_ok": True,
      "interactive_prompt": "Schedule Encinitas Breast?"},
 
-    # ── 11. Site-based PET ────────────────────────────────────────────────────
+    # ── 8. Site-based MRI ────────────────────────────────────────────────────
+    {"block_id": "wash_mri", "label": "Washington MRI",
+     "config": WASH_MRI_CONFIG, "priority": 9,
+     "can_skip": True, "exclude_ir": True,
+     "subspecialty_gate": "mri",
+     "concurrent_ok": True,
+     "interactive_prompt": "Schedule Washington MRI?"},
+
+    {"block_id": "enc_mri", "label": "Encinitas MRI",
+     "config": ENC_MRI_CONFIG, "priority": 10,
+     "can_skip": True, "exclude_ir": True,
+     "subspecialty_gate": "mri",
+     "concurrent_ok": True,
+     "interactive_prompt": "Schedule Encinitas MRI?"},
+
+    {"block_id": "poway_mri", "label": "Poway MRI",
+     "config": POWAY_MRI_CONFIG, "priority": 11,
+     "can_skip": True, "exclude_ir": True,
+     "subspecialty_gate": "mri",
+     "concurrent_ok": True,
+     "interactive_prompt": "Schedule Poway MRI?"},
+
+    # ── 9. Site-based PET ────────────────────────────────────────────────────
     {"block_id": "poway_pet", "label": "Poway PET",
-     "config": POWAY_PET_CONFIG, "priority": 16,
+     "config": POWAY_PET_CONFIG, "priority": 12,
      "can_skip": True, "exclude_ir": True,
      "subspecialty_gate": "pet",
      "concurrent_ok": True,
      "interactive_prompt": "Schedule Poway PET?"},
 
-    # ── 12. Site-based Gen (IR-inclusive) ────────────────────────────────────
+    # ── 10. Site-based Gen (IR-inclusive) ────────────────────────────────────
     {"block_id": "enc_gen", "label": "Encinitas Gen",
-     "config": ENC_GEN_CONFIG, "priority": 17,
+     "config": ENC_GEN_CONFIG, "priority": 13,
      "can_skip": True, "exclude_ir": False,
      "subspecialty_gate": "gen",
      "concurrent_ok": True,
      "interactive_prompt": "Schedule Encinitas Gen?"},
 
     {"block_id": "poway_gen", "label": "Poway Gen",
-     "config": POWAY_GEN_CONFIG, "priority": 18,
+     "config": POWAY_GEN_CONFIG, "priority": 14,
      "can_skip": True, "exclude_ir": False,
      "subspecialty_gate": "gen",
      "concurrent_ok": True,
      "interactive_prompt": "Schedule Poway Gen?"},
 
     {"block_id": "nc_gen", "label": "NC Gen",
-     "config": NC_GEN_CONFIG, "priority": 19,
+     "config": NC_GEN_CONFIG, "priority": 15,
      "can_skip": True, "exclude_ir": False,
      "subspecialty_gate": "gen",
      "concurrent_ok": True,
      "interactive_prompt": "Schedule National City Gen?"},
 
-    # ── 13. O'Toole (Tue/Wed/Fri) ────────────────────────────────────────────
-    {"block_id": "otoole", "label": "O'Toole",
-     "config": OTOOLE_CONFIG, "priority": 20,
+    # ── 11. Gen (non-IR staff) ────────────────────────────────────────────────
+    {"block_id": "gen_nonir", "label": "Remote Gen (non-IR)",
+     "config": GEN_NONIR_CONFIG, "priority": 16,
+     "can_skip": True, "exclude_ir": True, "concurrent_ok": True,
+     "interactive_prompt": "Schedule Gen diagnostic (non-IR staff)?"},
+
+    # ── 12. Gen (IR staff) ─────────────────────────────────────────────────────
+    {"block_id": "gen_ir", "label": "Remote Gen (IR staff)",
+     "config": GEN_IR_CONFIG, "priority": 17,
+     "can_skip": True, "exclude_ir": False,
+     "concurrent_ok": True,
+     "interactive_prompt": "Schedule Gen diagnostic (IR staff)?"},
+
+    # ── 13. Remote outpatient ─────────────────────────────────────────────────
+    {"block_id": "remote_mri", "label": "Remote MRI",
+     "config": REMOTE_MRI_CONFIG, "priority": 18,
+     "can_skip": True, "exclude_ir": True,
+     "subspecialty_gate": "mri",
+     "concurrent_ok": True,
+     "interactive_prompt": "Schedule Remote MRI?"},
+
+    {"block_id": "remote_breast", "label": "Remote Breast",
+     "config": REMOTE_BREAST_CONFIG, "priority": 19,
      "can_skip": True, "exclude_ir": False,  # DA eligible
      "subspecialty_gate": "mg",
      "concurrent_ok": True,
-     "interactive_prompt": "Schedule O'Toole?"},
+     "interactive_prompt": "Schedule Remote Breast?"},
+
+    {"block_id": "remote_pet", "label": "Remote PET",
+     "config": REMOTE_PET_CONFIG, "priority": 20,
+     "can_skip": True, "exclude_ir": True,
+     "subspecialty_gate": "pet",
+     "concurrent_ok": True,
+     "interactive_prompt": "Schedule Remote PET?"},
 
     # ── 14. Weekend inpatient — NON-IR ONLY ───────────────────────────────────
     {"block_id": "inpatient_weekend", "label": "Weekend Inpatient (M0/EP/Dx-CALL)",

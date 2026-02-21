@@ -342,18 +342,11 @@ Those would participate in conference will be paid $250/hr. Exception is for H&N
 
 ## Radiologist Site Preferences
 
-Our radiologists live all across San Diego, ranging from National
-City to Carlsbad.
+Our radiologists live all across San Diego, ranging from National City to Carlsbad. When possible, we try to fill all of the necessary onsite rotations
+while also minimizing travel distances. 
 
-
-When possible, we try to fill all of the necessary onsite rotations
-while also minimizing travel distances.
-
-
-Certain rotations, like M1 need to be split evenly amongst all
-participating radiologists; thus location preference should not be
+Certain rotations, like M1 need to be split evenly amongst all participating radiologists; thus location preference should not be
 accounted for on this rotation.
-
 
 ## Radiologists and Location Preferences
 -row 1: radiologist,site_name1,site_name2,site_name3,site_name4
@@ -394,21 +387,16 @@ Karen Yuan (KY),**,****,***,**
 - Number of vacation days
 
   - Radiologists will pick 5 weeks of vacation every 6 months
-
   - These vacation days will be the first to be placed into Qgenda
 
 
 - Number of OFF ALL Day
 
-  - Once all core rotations are assigned, any radiologist not assigned to a core rotation,
-
-and not on vacation, will be given an OFF ALL DAY.
-
+  - Once all core rotations are assigned, any radiologist not assigned to a core rotation, and not on vacation, will be given an OFF ALL DAY.
   - These should be evenly split amongst all Level 1's by the end of the year
 
 
 - Admin Days Off
-
   - Leadership roles can request additional days off to do administrative work
 
 
@@ -436,8 +424,6 @@ and not on vacation, will be given an OFF ALL DAY.
 
 
 ## Requests
-
-
 - Radiologists can submit requests for certain rotations or days off into
 
 Qgenda
@@ -445,18 +431,11 @@ Qgenda
 
 - Radiologists are capped with the number of requests they can make:
 
-  - 1 running request for the entire year (i.e. work remotely for every Thursday to
-
-cover cardiac catheter conference)
-
+  - 1 running request for the entire year (i.e. work remotely for every Thursday to cover cardiac catheter conference)
       - All requests will be reviewed annually to make sure there are no overlapping conflicts
-
-      - Requests will be honored when possible, but are subject to change when needed to
-
-complete group coverage
+      - Requests will be honored when possible, but are subject to change when needed to complete group coverage
 
   - 1 flexible request per week for urgent issues
-
       - approved and denied by Scheduler on case to case basis
 
 
@@ -473,5 +452,3 @@ in that subspeciality AND are already assigned to a core rotation that day
 7. Ensure balanced number of OFF ALL DAY for all level 1's
 8. Allow radiologists with leadership roles to be assigned additional ADMIN time
 9. Build a fair system for schedule requests/changes
-
-
