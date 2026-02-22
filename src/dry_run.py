@@ -20,7 +20,7 @@ import logging
 import sys
 from datetime import date, datetime, timedelta
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import Any, Dict, List, Optional
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 if str(PROJECT_ROOT) not in sys.path:
@@ -51,6 +51,124 @@ OUTPUTS_DIR = PROJECT_ROOT / "outputs"
 
 
 # ---------------------------------------------------------------------------
+# Visual analysis (matplotlib) — reference: scripts/analyze_schedule.py
+# ---------------------------------------------------------------------------
+
+def _generate_visual_analysis(
+    schedule: Dict,
+    metrics: Dict,
+    roster: List,
+    output_dir: Path,
+    prefix: str,
+) -> None:
+    """Generate matplotlib charts for dry_run schedule (shift/hours distribution, deviation, task breakdown)."""
+    try:
+        import matplotlib
+        matplotlib.use("Agg")
+        import matplotlib.pyplot as plt
+    except ImportError:
+        logger.warning("matplotlib not installed — skip visual analysis. Install with: pip install matplotlib")
+        return
+
+    out = Path(output_dir)
+    names = [p["name"] for p in roster]
+    rc = metrics.get("counts", {})
+    hc = metrics.get("hours_counts", {})
+    mean_val = metrics.get("mean", 0)
+    std_val = metrics.get("std", 0)
+    hours_mean = metrics.get("hours_mean", 0)
+    hours_std = metrics.get("hours_std", 0)
+    cv_pct = metrics.get("cv", 0)
+    hours_cv = metrics.get("hours_cv", 0)
+
+    staff_sorted = sorted(names, key=lambda n: rc.get(n, 0), reverse=True)
+    shifts = [rc.get(n, 0) for n in staff_sorted]
+    hours = [hc.get(n, 0) for n in staff_sorted]
+    x = range(len(staff_sorted))
+
+    # Chart 1: Shift distribution
+    fig, ax = plt.subplots(figsize=(13, 5))
+    colors = ["#b22222" if s > mean_val + std_val else "#1a3d7c" if s < mean_val - std_val else "#4a90d9" for s in shifts]
+    ax.bar(x, shifts, color=colors, alpha=0.85, width=0.65)
+    ax.axhline(mean_val, color="crimson", linewidth=1.8, linestyle="--", label=f"Mean: {mean_val:.1f}")
+    ax.axhline(mean_val + std_val, color="orange", linewidth=1, linestyle=":")
+    ax.axhline(mean_val - std_val, color="orange", linewidth=1, linestyle=":")
+    for bar, val in zip(ax.patches, shifts):
+        ax.text(bar.get_x() + bar.get_width() / 2, bar.get_height() + 0.4, str(val), ha="center", va="bottom", fontsize=8)
+    ax.set_xticks(list(x))
+    ax.set_xticklabels(staff_sorted, rotation=40, ha="right", fontsize=9)
+    ax.set_ylabel("Shift Count")
+    ax.set_title(f"Shift Distribution by Staff (dry_run)\nCV = {cv_pct:.1f}%", fontsize=13, fontweight="bold")
+    ax.legend()
+    ax.grid(axis="y", alpha=0.3)
+    fig.tight_layout()
+    fig.savefig(out / f"{prefix}_shift_distribution.png", dpi=150)
+    plt.close(fig)
+    print(f"  ✓ Visual  → {prefix}_shift_distribution.png")
+
+    # Chart 2: Hours distribution
+    fig, ax = plt.subplots(figsize=(13, 5))
+    hcolors = ["#b22222" if h > hours_mean + hours_std else "#1a3d7c" if h < hours_mean - hours_std else "#2e8b57" for h in hours]
+    ax.bar(x, hours, color=hcolors, alpha=0.85, width=0.65)
+    ax.axhline(hours_mean, color="crimson", linewidth=1.8, linestyle="--", label=f"Mean: {hours_mean:.1f} hrs")
+    ax.axhline(hours_mean + hours_std, color="orange", linewidth=1, linestyle=":")
+    ax.axhline(hours_mean - hours_std, color="orange", linewidth=1, linestyle=":")
+    for bar, val in zip(ax.patches, hours):
+        ax.text(bar.get_x() + bar.get_width() / 2, bar.get_height() + 1, f"{val:.0f}", ha="center", va="bottom", fontsize=8)
+    ax.set_xticks(list(x))
+    ax.set_xticklabels(staff_sorted, rotation=40, ha="right", fontsize=9)
+    ax.set_ylabel("Total Hours Assigned")
+    ax.set_title(f"Hours-Assigned Distribution by Staff (dry_run)\nCV = {hours_cv:.1f}%", fontsize=13, fontweight="bold")
+    ax.legend()
+    ax.grid(axis="y", alpha=0.3)
+    fig.tight_layout()
+    fig.savefig(out / f"{prefix}_hours_distribution.png", dpi=150)
+    plt.close(fig)
+    print(f"  ✓ Visual  → {prefix}_hours_distribution.png")
+
+    # Chart 3: Shift deviation from mean
+    deviations = [s - mean_val for s in shifts]
+    fig, ax = plt.subplots(figsize=(13, 4))
+    ax.bar(x, deviations, color=["#b22222" if d >= 0 else "#1a3d7c" for d in deviations], alpha=0.8, width=0.65)
+    ax.axhline(0, color="black", linewidth=1)
+    ax.axhline(std_val, color="orange", linewidth=1, linestyle="--", label="±1 SD")
+    ax.axhline(-std_val, color="orange", linewidth=1, linestyle="--")
+    ax.set_xticks(list(x))
+    ax.set_xticklabels(staff_sorted, rotation=40, ha="right", fontsize=9)
+    ax.set_ylabel("Deviation from Mean Shifts")
+    ax.set_title("Shift Deviation from Mean (dry_run)", fontsize=13, fontweight="bold")
+    ax.legend()
+    ax.grid(axis="y", alpha=0.3)
+    fig.tight_layout()
+    fig.savefig(out / f"{prefix}_shift_deviation.png", dpi=150)
+    plt.close(fig)
+    print(f"  ✓ Visual  → {prefix}_shift_deviation.png")
+
+    # Chart 4: Task breakdown (top 15 shifts by assignment count)
+    shift_counts: Dict[str, int] = {}
+    for _date, assignments in schedule.items():
+        for shift_name, person_name in assignments:
+            if person_name == "UNFILLED":
+                continue
+            shift_counts[shift_name] = shift_counts.get(shift_name, 0) + 1
+    sorted_shifts = sorted(shift_counts.items(), key=lambda x: x[1], reverse=True)[:15]
+    if sorted_shifts:
+        fig, ax = plt.subplots(figsize=(10, 6))
+        labels = [s[0] for s in reversed(sorted_shifts)]
+        vals = [s[1] for s in reversed(sorted_shifts)]
+        ax.barh(labels, vals, color="#4a90d9", alpha=0.85)
+        for bar, val in zip(ax.patches, vals):
+            ax.text(bar.get_width() + 0.3, bar.get_y() + bar.get_height() / 2, str(val), va="center", fontsize=9)
+        ax.set_xlabel("Assignment Count")
+        ax.set_title("Top 15 Task Types (dry_run)", fontsize=13, fontweight="bold")
+        ax.grid(axis="x", alpha=0.3)
+        fig.tight_layout()
+        fig.savefig(out / f"{prefix}_task_breakdown.png", dpi=150)
+        plt.close(fig)
+        print(f"  ✓ Visual  → {prefix}_task_breakdown.png")
+
+
+# ---------------------------------------------------------------------------
 # Main orchestrator
 # ---------------------------------------------------------------------------
 
@@ -60,6 +178,7 @@ def run_dry_run(
     output_dir: Path = OUTPUTS_DIR,
     interactive: bool = False,
     save_cursors: bool = False,
+    visual: bool = False,
 ) -> Dict:
     """
     Generate full schedule in dry-run mode (never pushes to QGenda).
@@ -74,6 +193,7 @@ def run_dry_run(
     Returns:
         Dict with schedule, metrics, violations, output paths
     """
+    output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
     prefix = f"dry_run_{start_date}_{end_date}"
     sep = "=" * 70
@@ -166,6 +286,9 @@ def run_dry_run(
     print(f"  {status} Hard violations: {h_count}")
     print(f"    Soft violations: {s_count}")
     print(f"  {cv_icon} Weighted CV: {cv_pct:.2f}% (target <10%)")
+    hours_cv = metrics.get("hours_cv", 0)
+    hcv_icon = "✓" if hours_cv < 10.0 else "✗"
+    print(f"  {hcv_icon} Hours-assigned CV: {hours_cv:.2f}% (target <10%)")
 
     # ── 6. Export ──────────────────────────────────────────────────────────
     print("\nStep 6/6: Exporting outputs...")
@@ -176,10 +299,12 @@ def run_dry_run(
     violations_path = output_dir / f"{prefix}_violations.txt"
 
     export_to_csv(full_schedule, csv_path, include_shift=True)
+    name_to_initials = {p["name"]: p["initials"] for p in roster}
     export_to_excel(
         full_schedule, xlsx_path, pivot=True,
         shift_order=["IR-1", "IR-2", "M0", "M1", "M2", "M3",
-                     "M0_WEEKEND", "EP", "LP", "Dx-CALL"]
+                     "M0_WEEKEND", "EP", "LP", "Dx-CALL"],
+        name_to_initials=name_to_initials,
     )
     export_fairness_report(
         metrics, report_path,
@@ -187,6 +312,20 @@ def run_dry_run(
         target_cv=10.0,
         top_n=5, bottom_n=5,
     )
+
+    # Fairness JSON (hours-assigned CV for programmatic fairness/balance checks)
+    import json
+    fairness_data_path = output_dir / f"{prefix}_fairness_data.json"
+    with open(fairness_data_path, "w") as f:
+        json.dump({
+            "weighted_cv": metrics.get("cv", 0),
+            "hours_mean": metrics.get("hours_mean", 0),
+            "hours_std": metrics.get("hours_std", 0),
+            "hours_cv": metrics.get("hours_cv", 0),
+            "hours_counts": {k: round(v, 1) for k, v in (metrics.get("hours_counts") or {}).items()},
+            "unfilled": metrics.get("unfilled", 0),
+        }, f, indent=2)
+    print(f"  ✓ Fairness JSON: {fairness_data_path.name} (includes hours-assigned CV)")
 
     # Violations report
     with open(violations_path, "w") as f:
@@ -211,6 +350,7 @@ def run_dry_run(
     print(f"  Total assignments: {total_assignments}")
     print(f"  Unfilled slots:    {metrics['unfilled']}")
     print(f"  Weighted CV:       {cv_pct:.2f}%  {cv_icon}")
+    print(f"  Hours-assigned CV: {hours_cv:.2f}%  {hcv_icon}")
     print(f"  Hard violations:   {h_count}  {status}")
     print(f"  Soft violations:   {s_count}")
 
@@ -228,9 +368,12 @@ def run_dry_run(
         icon = "✓" if cv_val < 10.0 else "✗"
         print(f"    {shift:<16} {cv_val:6.2f}%  {icon}")
 
+    if visual:
+        _generate_visual_analysis(full_schedule, metrics, roster, output_dir, prefix)
+
     print(f"\n{sep}\n")
 
-    return {
+    result = {
         "schedule":        full_schedule,
         "metrics":         metrics,
         "hard_violations": hard_violations,
@@ -243,6 +386,7 @@ def run_dry_run(
             "violations": violations_path,
         },
     }
+    return result
 
 
 # ---------------------------------------------------------------------------
@@ -258,6 +402,11 @@ def main():
     parser.add_argument("--output-dir",   default=None,  help="Output directory (default: outputs/)")
     parser.add_argument("--interactive",  action="store_true", help="Prompt before each block")
     parser.add_argument("--save-cursors", action="store_true", help="Persist cursor state after run")
+    parser.add_argument(
+        "--visual",
+        action="store_true",
+        help="Generate matplotlib charts (shift/hours distribution, deviation, task breakdown). Reference: scripts/analyze_schedule.py",
+    )
     args = parser.parse_args()
 
     try:
@@ -277,6 +426,7 @@ def main():
         output_dir=out_dir,
         interactive=args.interactive,
         save_cursors=args.save_cursors,
+        visual=args.visual,
     )
 
 

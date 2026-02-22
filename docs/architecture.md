@@ -1,6 +1,6 @@
 # Radiology Scheduler — Architecture Reference
 
-**Version:** 3.0.0  
+**Version:** 3.1.0  
 **Last Updated:** 2026-02-21
 
 ---
@@ -14,23 +14,29 @@ not push to QGenda directly; all runs are dry runs by default.
 ```
 config/                     Runtime configuration
   roster_key.csv            19 radiologists + pool flags + subspecialties
-  vacation_map.csv          Date-keyed vacation blocks per person
+  vacation_map.csv          date → unavailable_staff (semicolon-sep); from extract_vacation_map or manual
   cursor_state.json         16 fairness cursors, persisted across runs
 
+inputs/                     QGenda .xlsx exports (optional)
+  *.xlsx                    Source for scripts/extract_vacation_map.py → vacation_map.csv
+
 src/
-  schedule_config.py        Block definitions, shift codes, regex aliases
-  engine.py                 Core scheduling algorithm + block orchestrator
+  schedule_config.py        Block definitions, shift codes, regex aliases, task grouping (mercy_weekday/weekend, weekend_outpt)
+  engine.py                 Core scheduling algorithm + block orchestrator; one assignment per (date, shift); O'Toole Tue/Wed/Fri
   config.py                 CSV loaders, cursor I/O
   constraints.py            Hard/soft constraint checker
-  skills.py                 Subspecialty qualification helpers
+  skills.py                 Subspecialty qualification helpers (incl. MRI+Proc for Wash-MRI)
   exporter.py               CSV, Excel, fairness report, violations output
-  dry_run.py                CLI entry point
+  dry_run.py                CLI entry point (--visual for matplotlib charts)
+
+scripts/
+  extract_vacation_map.py   Build vacation_map.csv from QGenda .xlsx (exempt: vacation, off, admin, no call, no ep)
 
 tests/
   test_full_orchestration.py  37 integration tests across all sections
 
 outputs/                    Generated per run (git-ignored)
-  *.csv, *.xlsx, *_fairness_report.txt, *_violations.txt
+  *.csv, *.xlsx, *_fairness_report.txt, *_fairness_data.json, *_violations.txt [, *_*.png with --visual]
 ```
 
 ---
@@ -100,7 +106,8 @@ Eligible Pool         cursor picks from this set
 | Tag | Staff | Enables |
 |---|---|---|
 | `ir` | DA, SS, SF, TR | IR-1, IR-2, IR-CALL |
-| `MRI` | BT, EC, EL, GA, JC, JV, KY, MB | Remote-MRI, Wash-MRI, Enc-MRI, Poway-MRI, Wknd-MRI |
+| `MRI` | BT, EC, EL, GA, JC, JV, KY, MB | Remote-MRI, Enc-MRI, Poway-MRI, Wknd-MRI |
+| `MRI+Proc` | EL, GA, JC, JV, KY, MB | **Wash-MRI** (Washington MRI only) |
 | `MG` | DA, EK, JC, JJ, KR, KY, MS, RT | Remote-Breast, Wash-Breast, Enc-Breast, O'Toole |
 | `PET` | EK, MB, MG, YR | Remote-PET, Poway-PET, Wknd-PET |
 | `Gen` | All 19 | Remote-Gen, Enc-Gen, Poway-Gen, NC-Gen, all Gen sites |
@@ -135,7 +142,7 @@ date. This matches real QGenda practice.
 | 14–15 | Site Breast (Wash/Enc) | No | 14=No, 15=Yes |
 | 16 | Poway PET | No | Yes |
 | 17–19 | Site Gen (Enc/Poway/NC) | No | No (IR eligible) |
-| 20 | O'Toole | No | No (DA eligible) |
+| 20 | O'Toole (Tue/Wed/Fri only) | No | No (DA eligible) |
 | 21 | Weekend Inpatient | No | **Yes** |
 | 22–23 | Weekend MRI / PET | No | Yes |
 
@@ -174,16 +181,19 @@ normalize_task_name("Scripps O'Toole Breast Center (O'Toole 0730-1630)")
 |---|---|
 | `check_vacation` | No one assigned on a vacation date |
 | `check_double_booking` | No one in two exclusive shifts same day |
+| `check_duplicate_task_assignment` | At most one staff per (date, shift) — no two radiologists on same task |
+| `check_ir_and_gen_same_day` | No IR weekday (IR-1/IR-2) + Gen shift same day |
+| `check_single_weekday_task_per_person` | No radiologist with two distinct weekday tasks same day |
 | `check_mercy_pool_gate` | No IR staff in M0/M1/M2/M3 |
 | `check_weekend_pool_gate` | No IR staff in EP/Dx-CALL/M0_WEEKEND |
 | `check_ir_pool_gate` | No non-IR staff in IR-1/IR-2/IR-CALL |
-| `check_subspecialty_qualification` | Shift requires tag person doesn't have |
+| `check_subspecialty_qualification` | Shift requires tag person doesn't have (incl. MRI+Proc for Wash-MRI) |
 
 ### Soft Constraints (logged, not blocked)
 | Check | Rule |
 |---|---|
 | Back-to-back weekend | Same person two consecutive weekends |
-| Workload CV exceeded | Per-shift CV > 10% target |
+| Workload CV exceeded | Weighted or hours-assigned CV > 10% target |
 
 ---
 
@@ -200,6 +210,10 @@ normalize_task_name("Scripps O'Toole Breast Center (O'Toole 0730-1630)")
   "max":            float,
   "counts":         {name: int},   # raw assignment count per person
   "weighted_counts":{name: float}, # shift-weight-adjusted load per person
+  "hours_counts":   {name: float}, # total hours assigned per person (from SHIFT_DEFINITIONS)
+  "hours_mean":     float,
+  "hours_std":      float,
+  "hours_cv":       float,         # CV of hours assigned (fairness/balance)
   "per_shift":      {shift: {name: int}},
   "per_shift_cv":   {shift: float},
   "unfilled":       int,
@@ -214,11 +228,21 @@ separately) converges faster.
 
 ---
 
+## Task Grouping (schedule_config.py)
+
+Rotation configs are grouped into three explicit types:
+
+- **mercy_weekday_cfg** — Mercy inpatient weekday (M0, M1, M2, M3); non-IR only. Built via `_mercy_weekday_cfg()`.
+- **mercy_weekend_cfg** — Mercy inpatient weekend (M0_WEEKEND, EP, Dx-CALL); non-IR only. Built via `_mercy_weekend_cfg()`.
+- **weekend_outpt_cfg** — Weekend outpatient (Wknd-MRI, Wknd-PET). Built via `_weekend_outpt_cfg()`.
+
+Block configs reference these helpers; backwards-compat aliases were removed in 3.1.
+
+---
+
 ## Weekend Scheduling
 
-Weekends are scheduled using **Saturday as the period key**. After `schedule_blocks()`
-returns, `expand_weekend_to_sunday(schedule)` inserts an identical Sunday entry
-for each Saturday. Both days carry the same assignments:
+Weekends are scheduled using **Saturday and Sunday as distinct dates** in `weekend_dates` (from `get_weekend_dates()`). Each weekend day gets its own cursor advance and assignments. Assignments:
 
 - `M0_WEEKEND` — weekend helper
 - `EP` — Early Person (on-site Saturday, remote Sunday)
@@ -249,15 +273,27 @@ python -m src.dry_run --start 2026-04-01 --end 2026-06-30 --save-cursors
 
 ---
 
+## Vacation Map and Inputs
+
+`config/vacation_map.csv` has columns `date`, `unavailable_staff`. Each row is one date (YYYY-MM-DD) with semicolon-separated staff names who are unavailable that day. Populate manually or via:
+
+```bash
+python scripts/extract_vacation_map.py   # reads first .xlsx in inputs/, writes config/vacation_map.csv
+```
+
+`extract_vacation_map.py` parses QGenda List by Assignment Tag or List by Staff Export, extracts rows whose task matches exempt patterns (vacation, off all day, admin, no call, no ep), and aggregates by date. Staff names are normalized to "First Last" to match `roster_key.csv`.
+
+---
+
 ## File Dependencies
 
 ```
 dry_run.py
   ├── config.py           load_roster(), load_vacation_map(), load_cursor_state()
-  ├── engine.py           schedule_blocks(), expand_weekend_to_sunday()
-  │     └── schedule_config.py   SCHEDULING_BLOCKS, SHIFT_DEFINITIONS
-  ├── constraints.py      ConstraintChecker
-  │     └── skills.py     SHIFT_SUBSPECIALTY_MAP, normalize_task_name()
+  ├── engine.py           schedule_blocks(), get_weekend_dates()
+  │     └── schedule_config.py   SCHEDULING_BLOCKS, SHIFT_DEFINITIONS, task grouping
+  ├── constraints.py      ConstraintChecker (incl. duplicate task, IR+Gen same day, two weekday tasks)
+  │     └── skills.py     SHIFT_SUBSPECIALTY_MAP, normalize_task_name() (incl. MRI+Proc for Wash-MRI)
   └── exporter.py         export_to_csv(), export_to_excel(), export_fairness_report()
-        └── exporter.py   calculate_fairness_metrics()
+        └── engine.py     calculate_fairness_metrics() (incl. hours_counts, hours_cv)
 ```

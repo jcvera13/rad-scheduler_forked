@@ -66,11 +66,12 @@ def export_to_excel(
     output_path: Path,
     pivot: bool = True,
     shift_order: Optional[List[str]] = None,
+    name_to_initials: Optional[Dict[str, str]] = None,
 ) -> None:
     """
     Export schedule to formatted Excel grid.
 
-    Pivot mode (default): rows=date, columns=shift, cells=staff name.
+    Pivot mode (default): rows=date, columns=shift, cells=staff name (or initials).
     Flat mode: rows=(date, shift, staff).
 
     Args:
@@ -78,15 +79,18 @@ def export_to_excel(
         output_path:  .xlsx file path
         pivot:        If True, create date × shift grid
         shift_order:  Column order for pivot (defaults to appearance order)
+        name_to_initials:  If provided, cells show initials (e.g. DA, JCV) instead of full names
     """
     import pandas as pd
 
     output_path.parent.mkdir(parents=True, exist_ok=True)
+    name_map = name_to_initials or {}
 
     rows = []
     for date_str, assignments in sorted(schedule.items()):
         for shift_name, person_name in assignments:
-            rows.append({"Date": date_str, "Shift": shift_name, "Staff": person_name})
+            display_name = name_map.get(person_name, person_name)
+            rows.append({"Date": date_str, "Shift": shift_name, "Staff": display_name})
 
     df = pd.DataFrame(rows)
     if df.empty:
@@ -180,14 +184,18 @@ def export_fairness_report(
 
     wc = metrics.get("weighted_counts", metrics.get("counts", {}))
     rc = metrics.get("counts", {})
+    hc = metrics.get("hours_counts", {})
     per_shift = metrics.get("per_shift", {})
     per_shift_cv = metrics.get("per_shift_cv", {})
     mean_val = metrics.get("mean", 0)
     cv = metrics.get("cv", 0)
+    hours_mean = metrics.get("hours_mean", 0)
+    hours_cv = metrics.get("hours_cv", 0)
     unfilled = metrics.get("unfilled", 0)
 
     sorted_names = sorted(wc.keys(), key=lambda n: wc.get(n, 0), reverse=True)
     pass_fail = "✓ PASS" if cv < target_cv else "✗ FAIL"
+    hours_pass_fail = "✓ PASS" if hours_cv < target_cv else "✗ FAIL"
 
     sep = "=" * 70
 
@@ -200,22 +208,27 @@ def export_fairness_report(
         f"  Mean weighted load:    {mean_val:.2f}",
         f"  Std Dev:               {metrics.get('std', 0):.2f}",
         f"  Min / Max:             {metrics.get('min', 0):.2f} / {metrics.get('max', 0):.2f}",
+        "",
+        f"  Hours Assigned CV:     {hours_cv:.2f}%  (target <{target_cv:.0f}%)  {hours_pass_fail}",
+        f"  Mean hours assigned:   {hours_mean:.2f}",
+        f"  Hours Std Dev:         {metrics.get('hours_std', 0):.2f}",
         f"  Unfilled slots:        {unfilled}",
         "",
         "─" * 70,
-        "  Per-Radiologist Weighted Workload",
+        "  Per-Radiologist Weighted Workload & Hours",
         "─" * 70,
-        f"  {'Name':<24} {'Wt Load':>8} {'Raw Count':>10} {'% of Mean':>10}  {'Δ Mean':>8}",
+        f"  {'Name':<24} {'Wt Load':>8} {'Hours':>8} {'Raw':>6} {'% Mean':>8}  {'Δ Mean':>8}",
     ]
 
     for name in sorted_names:
         wt = wc.get(name, 0)
         raw = rc.get(name, 0)
+        hrs = hc.get(name, 0)
         pct = (wt / mean_val * 100) if mean_val else 0
         delta = wt - mean_val
         flag = "  ← ↑ over" if delta > mean_val * 0.20 else ("  ← ↓ under" if delta < -mean_val * 0.20 else "")
         lines.append(
-            f"  {name:<24} {wt:>8.2f} {raw:>10d} {pct:>9.1f}% {delta:>+9.2f}{flag}"
+            f"  {name:<24} {wt:>8.2f} {hrs:>8.1f} {raw:>6d} {pct:>7.1f}% {delta:>+9.2f}{flag}"
         )
 
     lines += [
