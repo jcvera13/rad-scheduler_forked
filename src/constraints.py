@@ -160,9 +160,11 @@ class ConstraintChecker:
 
     def check_duplicate_task_assignment(self, schedule: Schedule) -> List[ConstraintViolation]:
         """
-        Hard: Each (date, shift) must have at most one staff assigned.
-        Prevents two radiologists being assigned to the same task.
+        Hard: Each (date, shift) has at most one staff (or up to MAX_SLOTS_PER_SHIFT for
+        shifts in ALLOW_MULTIPLE_PER_SLOT_SHIFTS, e.g. Remote-Gen).
         """
+        from src.schedule_config import ALLOW_MULTIPLE_PER_SLOT_SHIFTS, MAX_SLOTS_PER_SHIFT
+
         violations = []
         for date_str, assignments in schedule.items():
             by_shift: Dict[str, List[str]] = {}
@@ -171,19 +173,24 @@ class ConstraintChecker:
                     continue
                 by_shift.setdefault(shift_name, []).append(person_name)
             for shift_name, staff_list in by_shift.items():
+                max_allowed = (
+                    MAX_SLOTS_PER_SHIFT.get(shift_name, 1)
+                    if shift_name in ALLOW_MULTIPLE_PER_SLOT_SHIFTS
+                    else 1
+                )
                 unique_staff = set(staff_list)
-                if len(unique_staff) > 1:
+                if len(unique_staff) > max_allowed:
                     violations.append(ConstraintViolation(
                         severity=ConstraintSeverity.HARD,
                         constraint_type="DUPLICATE_TASK_ASSIGNMENT",
                         description=(
-                            f"Task {shift_name} on {date_str} has multiple staff: {sorted(unique_staff)}"
+                            f"Task {shift_name} on {date_str} has {len(unique_staff)} staff (max {max_allowed}): {sorted(unique_staff)}"
                         ),
                         date=date_str,
                         shift=shift_name,
                         details={"staff": list(unique_staff)},
                     ))
-                elif len(staff_list) > 1:
+                elif len(staff_list) > len(unique_staff):
                     violations.append(ConstraintViolation(
                         severity=ConstraintSeverity.HARD,
                         constraint_type="DUPLICATE_TASK_ASSIGNMENT",
@@ -255,6 +262,44 @@ class ConstraintChecker:
                         date=date_str,
                         staff=person_name,
                         details={"shifts": list(shifts)},
+                    ))
+        return violations
+
+    # -----------------------------------------------------------------------
+    # HARD: Task allowed weekdays (fixed day-of-week constraints)
+    # -----------------------------------------------------------------------
+
+    def check_task_allowed_weekdays(self, schedule: Schedule) -> List[ConstraintViolation]:
+        """
+        Hard (or warn): Each assignment's date must fall on an allowed weekday for that task.
+        Uses TASK_FIXED_WEEKDAYS from schedule_config.
+        """
+        from src.schedule_config import TASK_FIXED_WEEKDAYS
+
+        violations = []
+        for date_str, assignments in schedule.items():
+            try:
+                d = date.fromisoformat(date_str)
+            except (TypeError, ValueError):
+                continue
+            wd = d.weekday()
+            for shift_name, person_name in assignments:
+                if person_name == "UNFILLED":
+                    continue
+                allowed = TASK_FIXED_WEEKDAYS.get(shift_name)
+                if allowed is None:
+                    continue
+                if wd not in allowed:
+                    violations.append(ConstraintViolation(
+                        severity=ConstraintSeverity.HARD,
+                        constraint_type="TASK_DAY_OF_WEEK",
+                        description=(
+                            f"{shift_name} on {date_str} (weekday={wd}) is not in allowed weekdays {sorted(allowed)}"
+                        ),
+                        date=date_str,
+                        staff=person_name,
+                        shift=shift_name,
+                        details={"weekday": wd, "allowed": list(allowed)},
                     ))
         return violations
 
@@ -550,6 +595,7 @@ class ConstraintChecker:
         hard.extend(self.check_vacation(schedule))
         hard.extend(self.check_double_booking(schedule))
         hard.extend(self.check_duplicate_task_assignment(schedule))
+        hard.extend(self.check_task_allowed_weekdays(schedule))
         hard.extend(self.check_ir_and_gen_same_day(schedule))
         hard.extend(self.check_ir_weekday_exclusive(schedule))
         hard.extend(self.check_one_outpatient_per_person(schedule))

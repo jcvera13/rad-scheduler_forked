@@ -48,6 +48,7 @@ logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s: %(messag
 logger = logging.getLogger(__name__)
 
 OUTPUTS_DIR = PROJECT_ROOT / "outputs"
+DRY_RUN_STATE_PATH = PROJECT_ROOT / "dry_run_state.json"
 
 
 # ---------------------------------------------------------------------------
@@ -169,6 +170,69 @@ def _generate_visual_analysis(
 
 
 # ---------------------------------------------------------------------------
+# Dry-run state (exemption days from --group runs)
+# ---------------------------------------------------------------------------
+
+def load_dry_run_state() -> Dict[str, Any]:
+    """Load dry_run_state.json; return {"exemption_dates": {date_str: [names]}} or empty."""
+    if not DRY_RUN_STATE_PATH.exists():
+        return {"exemption_dates": {}}
+    try:
+        import json
+        with open(DRY_RUN_STATE_PATH) as f:
+            data = json.load(f)
+        return {"exemption_dates": data.get("exemption_dates", {})}
+    except Exception as e:
+        logger.warning(f"Could not load dry_run_state: {e}")
+        return {"exemption_dates": {}}
+
+
+def save_dry_run_state(exemption_dates: Dict[str, List[str]]) -> None:
+    """Write exemption_dates to dry_run_state.json."""
+    import json
+    data = {"exemption_dates": exemption_dates, "updated": datetime.now().isoformat()}
+    with open(DRY_RUN_STATE_PATH, "w") as f:
+        json.dump(data, f, indent=2)
+    logger.info(f"Dry-run state saved: {len(exemption_dates)} dates with exemptions")
+
+
+def clear_dry_run_state() -> None:
+    """Remove dry_run_state.json (full schedule run or --reset)."""
+    if DRY_RUN_STATE_PATH.exists():
+        DRY_RUN_STATE_PATH.unlink()
+        logger.info("Dry-run state cleared")
+
+
+def merge_exemptions_into_vacation(
+    vacation_map: Dict[str, List[str]],
+    exemption_dates: Dict[str, List[str]],
+) -> Dict[str, List[str]]:
+    """Merge exemption_dates into vacation_map so exempt staff are unavailable on those dates."""
+    out = dict(vacation_map)
+    for date_str, names in exemption_dates.items():
+        existing = set(out.get(date_str, []))
+        existing.update(names)
+        out[date_str] = list(existing)
+    return out
+
+
+def extrapolate_exemption_dates_from_schedule(
+    schedule: Dict[str, List[tuple]],
+) -> Dict[str, List[str]]:
+    """
+    For each date in the schedule, collect all assigned staff; those dates become
+    exemption days for those staff (so they are not double-assigned elsewhere).
+    Returns {date_str: [name1, name2, ...]}.
+    """
+    exemption: Dict[str, List[str]] = {}
+    for date_str, assignments in schedule.items():
+        names = [name for _, name in assignments if name != "UNFILLED"]
+        if names:
+            exemption[date_str] = list(set(exemption.get(date_str, []) + names))
+    return exemption
+
+
+# ---------------------------------------------------------------------------
 # Main orchestrator
 # ---------------------------------------------------------------------------
 
@@ -179,6 +243,8 @@ def run_dry_run(
     interactive: bool = False,
     save_cursors: bool = False,
     visual: bool = False,
+    group: Optional[str] = None,
+    reset: bool = False,
 ) -> Dict:
     """
     Generate full schedule in dry-run mode (never pushes to QGenda).
@@ -189,6 +255,8 @@ def run_dry_run(
         output_dir:   Directory for output files
         interactive:  If True, prompt user before each block
         save_cursors: If True, persist updated cursor state to disk
+        group:        If set (e.g. 'group1'), schedule only blocks in that group and update dry_run_state
+        reset:        If True, clear dry_run_state before run
 
     Returns:
         Dict with schedule, metrics, violations, output paths
@@ -196,19 +264,35 @@ def run_dry_run(
     output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
     prefix = f"dry_run_{start_date}_{end_date}"
+    if group:
+        prefix = f"dry_run_{start_date}_{end_date}_{group}"
     sep = "=" * 70
 
     print(f"\n{sep}")
     print(f"  DRY RUN MODE — No data pushed to QGenda")
     print(f"  Period: {start_date} → {end_date}")
+    if group:
+        print(f"  Group: {group} (grouped scheduling)")
+    if reset:
+        print(f"  Reset: dry_run_state cleared")
     print(f"{sep}\n")
+
+    # ── 0. Reset or load dry_run_state ───────────────────────────────────────
+    if reset:
+        clear_dry_run_state()
+    state = load_dry_run_state() if not reset else {"exemption_dates": {}}
+    exemption_dates = state.get("exemption_dates", {})
 
     # ── 1. Load configuration ──────────────────────────────────────────────
     print("Step 1/6: Loading configuration...")
     roster         = load_roster()
     vacation_map   = load_vacation_map()
     cursor_state   = load_cursor_state()
-    print(f"  ✓ {len(roster)} radiologists | {len(vacation_map)} vacation dates | cursors: {cursor_state}")
+    # Merge exemption days from prior --group runs so staff aren't double-assigned
+    vacation_map = merge_exemptions_into_vacation(vacation_map, exemption_dates)
+    if exemption_dates:
+        print(f"  ✓ Loaded {len(exemption_dates)} exemption dates from dry_run_state")
+    print(f"  ✓ {len(roster)} radiologists | vacation+exemptions applied | cursors: {cursor_state}")
 
     # ── 2. Validate inputs ─────────────────────────────────────────────────
     print("\nStep 2/6: Validating inputs...")
@@ -248,7 +332,18 @@ def run_dry_run(
 
     # ── 4. Block scheduling ────────────────────────────────────────────────
     print("\nStep 4/6: Running block scheduling...")
-    print("  Block order: IR → Mercy → Gen → Remote → Site → O\'Toole → Weekend")
+    from src.schedule_config import SCHEDULING_BLOCKS, DRY_RUN_GROUPS
+
+    blocks_to_run = SCHEDULING_BLOCKS
+    if group:
+        if group not in DRY_RUN_GROUPS:
+            print(f"  ✗ Unknown group: {group}. Valid: {list(DRY_RUN_GROUPS.keys())}")
+            sys.exit(1)
+        block_ids = set(DRY_RUN_GROUPS[group])
+        blocks_to_run = [b for b in SCHEDULING_BLOCKS if b["block_id"] in block_ids]
+        print(f"  Group '{group}': {[b['block_id'] for b in blocks_to_run]}")
+    else:
+        print("  Block order: IR → Mercy → Gen → Remote → Site → O\'Toole → Weekend")
 
     full_schedule, cursor_state = schedule_blocks(
         roster=roster,
@@ -257,10 +352,22 @@ def run_dry_run(
         vacation_map=vacation_map,
         interactive=interactive,
         weekend_dates=weekend_dates if weekend_dates else None,
+        blocks=blocks_to_run,
     )
 
     total_assignments = sum(len(v) for v in full_schedule.values())
     print(f"  ✓ {total_assignments} total assignments across {len(full_schedule)} dates")
+
+    # When running a group, extrapolate exemption days and persist to dry_run_state
+    if group:
+        new_exemptions = extrapolate_exemption_dates_from_schedule(full_schedule)
+        for date_str, names in new_exemptions.items():
+            exemption_dates.setdefault(date_str, [])
+            exemption_dates[date_str] = list(set(exemption_dates[date_str]) | set(names))
+        save_dry_run_state(exemption_dates)
+        print(f"  ✓ Exemption days updated in {DRY_RUN_STATE_PATH.name}")
+    else:
+        clear_dry_run_state()
 
     if save_cursors:
         save_cursor_state(cursor_state)
@@ -403,6 +510,16 @@ def main():
     parser.add_argument("--interactive",  action="store_true", help="Prompt before each block")
     parser.add_argument("--save-cursors", action="store_true", help="Persist cursor state after run")
     parser.add_argument(
+        "--group",
+        default=None,
+        help="Schedule only a named group (group1, group2, group3, group4). Updates dry_run_state.json with exemption days.",
+    )
+    parser.add_argument(
+        "--reset",
+        action="store_true",
+        help="Clear dry_run_state.json before run (use before full schedule or to clear exemptions).",
+    )
+    parser.add_argument(
         "--visual",
         action="store_true",
         help="Generate matplotlib charts (shift/hours distribution, deviation, task breakdown). Reference: scripts/analyze_schedule.py",
@@ -427,6 +544,8 @@ def main():
         interactive=args.interactive,
         save_cursors=args.save_cursors,
         visual=args.visual,
+        group=args.group,
+        reset=args.reset,
     )
 
 

@@ -92,6 +92,8 @@ def load_roster(
     Expected columns:
       id, index, initials, name, email, role, exempt_dates, fte,
       participates_mercy, participates_ir, participates_weekend,
+      participates_gen, participates_outpatient, participates_mg,
+      participates_MRI, participates_PET (optional; if missing, inferred from subspecialties),
       subspecialties, notes (optional)
 
     Returns sorted list of dicts (sorted by index).
@@ -123,6 +125,18 @@ def load_roster(
             "subspecialties":         _parse_subspecialties(row.get("subspecialties", "")),
             "notes":                  str(row.get("notes", "") or ""),
         }
+
+        # participates_MRI / participates_PET: use column if present, else infer from subspecialties (backward compat)
+        if "participates_MRI" in row and pd.notna(row.get("participates_MRI")) and str(row["participates_MRI"]).strip():
+            person["participates_MRI"] = _parse_yes_no(row["participates_MRI"])
+        else:
+            person["participates_MRI"] = any(
+                s.lower() == "mri" or s.lower().startswith("mri") for s in person["subspecialties"]
+            )
+        if "participates_PET" in row and pd.notna(row.get("participates_PET")) and str(row["participates_PET"]).strip():
+            person["participates_PET"] = _parse_yes_no(row["participates_PET"])
+        else:
+            person["participates_PET"] = any(s.lower() == "pet" for s in person["subspecialties"])
 
         # Parse exempt_dates (semicolon-separated YYYY-MM-DD)
         raw_exempt = row.get("exempt_dates", "")

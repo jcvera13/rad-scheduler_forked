@@ -314,9 +314,23 @@ def schedule_blocks(
         pool_filter = config.get("pool_filter")
         subspecialty_gate = block.get("subspecialty_gate")
         exclude_ir = block.get("exclude_ir", False)
+        require_mri = config.get("require_participates_mri", False)
+        require_pet = config.get("require_participates_pet", False)
 
         # Filter pool — exclude_ir is a hard gate for mercy/weekend blocks
-        pool = _filter_pool(roster, pool_filter, subspecialty_gate, exclude_ir=exclude_ir)
+        pool = _filter_pool(
+            roster, pool_filter, subspecialty_gate, exclude_ir=exclude_ir,
+            require_participates_mri=require_mri, require_participates_pet=require_pet,
+        )
+
+        # SOFT prefer: sort so preferred subspecialty tag holders are first (cursor picks them earlier)
+        preferred = config.get("preferred_subspecialty")
+        if preferred and pool:
+            tag_lower = preferred.lower()
+            pool = sorted(
+                pool,
+                key=lambda p: (0 if tag_lower in [s.lower() for s in p.get("subspecialties", [])] else 1, p["index"]),
+            )
 
         if not pool:
             logger.warning(f"Block '{label}': empty pool after filter — skipping")
@@ -337,18 +351,48 @@ def schedule_blocks(
                 continue
             block_dates = weekend_dates
         else:
-            block_dates = dates
-        # Optional: restrict to specific weekdays (e.g. O'Toole Tue/Wed/Fri only)
+            block_dates = list(dates)
+
+        # 2-week cycle + fixed weekdays (for weekday blocks)
+        if block_id != "ir_call" and block_dates and schedule_type == "weekday":
+            from src.schedule_config import (
+                TASK_FIXED_WEEKDAYS,
+                REMOTE_GEN_CYCLE_WEEKDAYS,
+                NC_GEN_WEEK2_WEEKDAYS,
+            )
+            cycle_start = block_dates[0]
+            shift_names_block = config.get("shift_names", [])
+
+            # Remote-Gen (gen_nonir): build dates from 2-week cycle with multi-slot days
+            if block_id == "gen_nonir" and "Remote-Gen" in shift_names_block:
+                block_dates = _build_remote_gen_cycle_dates(dates, cycle_start, REMOTE_GEN_CYCLE_WEEKDAYS)
+                logger.debug(f"Block '{label}': Remote-Gen cycle dates → {len(block_dates)} slots")
+            else:
+                # Fixed day-of-week: filter to allowed weekdays for this block's shifts
+                for sh in shift_names_block:
+                    if sh in TASK_FIXED_WEEKDAYS:
+                        allowed = TASK_FIXED_WEEKDAYS[sh]
+                        block_dates = [d for d in block_dates if d.weekday() in allowed]
+                        break
+                # NC-Gen: week 2 only Mon–Tue
+                if block_id == "nc_gen":
+                    block_dates = [
+                        d for d in block_dates
+                        if (_cycle_week(d, cycle_start) != 1) or (d.weekday() in NC_GEN_WEEK2_WEEKDAYS)
+                    ]
+                    logger.debug(f"Block '{label}': NC-Gen cycle filter → {len(block_dates)} dates")
+
+        # Optional: restrict to specific weekdays (e.g. O'Toole Mon/Tue/Wed only)
         allowed_weekdays = config.get("allowed_weekdays")
-        if allowed_weekdays is not None and block_dates:
+        if allowed_weekdays is not None and block_dates and block_id != "ir_call":
             block_dates = [d for d in block_dates if d.weekday() in allowed_weekdays]
-            logger.debug(f"Block '{label}': filtered to weekdays {allowed_weekdays} → {len(block_dates)} dates")
-        # Optional: cap weekdays per week (demand-based; reduces UNFILLED for outpatient)
+            logger.debug(f"Block '{label}': allowed_weekdays {allowed_weekdays} → {len(block_dates)} dates")
+        # Optional: cap weekdays per week (demand-based)
         slots_per_week = config.get("slots_per_week")
-        if slots_per_week is not None and block_dates and schedule_type == "weekday":
+        if slots_per_week is not None and block_dates and schedule_type == "weekday" and block_id not in ("ir_call", "gen_nonir"):
             from itertools import groupby
             def week_key(d):
-                return d.isocalendar()[0], d.isocalendar()[1]  # year, week
+                return d.isocalendar()[0], d.isocalendar()[1]
             block_dates_sorted = sorted(block_dates)
             limited = []
             for (_y, _w), week_dates in groupby(block_dates_sorted, key=week_key):
@@ -422,6 +466,25 @@ def schedule_blocks(
                         augmented_vacation.get(date_str, []) + prior_outpatient_names
                     ))
 
+        # IR-CALL: weekend-only, mirrored — one person per weekend for both Sat and Sun
+        if block_id == "ir_call" and weekend_dates:
+            weekend_pairs = _build_weekend_pairs(weekend_dates)
+            if weekend_pairs:
+                block_schedule, new_cursor = _schedule_ir_call_mirrored(
+                    people=pool,
+                    weekend_pairs=weekend_pairs,
+                    cursor=cursor,
+                    vacation_map=augmented_vacation,
+                )
+                cursor_state[cursor_key] = new_cursor
+                for date_str, assignments in block_schedule.items():
+                    if date_str not in merged:
+                        merged[date_str] = []
+                    for shift_name, person_name in assignments:
+                        merged[date_str].append((shift_name, person_name))
+                logger.info(f"Block '{label}' scheduled: IR-CALL mirrored {len(weekend_pairs)} weekends, cursor→{new_cursor:.2f}")
+            continue  # skip schedule_period for IR-CALL (handled above or no pairs)
+
         block_schedule, new_cursor = schedule_period(
             people=pool,
             dates=block_dates,
@@ -437,20 +500,25 @@ def schedule_blocks(
 
         cursor_state[cursor_key] = new_cursor
 
-        # Merge into master schedule — at most one assignment per (date, shift)
-        # to prevent two radiologists on the same task in exports.
+        # Merge into master schedule. Most shifts: at most one per (date, shift).
+        # Remote-Gen (and others in ALLOW_MULTIPLE_PER_SLOT_SHIFTS) may have up to MAX_SLOTS_PER_SHIFT.
+        from src.schedule_config import ALLOW_MULTIPLE_PER_SLOT_SHIFTS, MAX_SLOTS_PER_SHIFT
         for date_str, assignments in block_schedule.items():
             if date_str not in merged:
                 merged[date_str] = []
-            existing_shifts = {shift for shift, _ in merged[date_str]}
+            shift_counts = {}
+            for _s, _ in merged[date_str]:
+                shift_counts[_s] = shift_counts.get(_s, 0) + 1
             for shift_name, person_name in assignments:
-                if shift_name in existing_shifts:
+                max_allowed = MAX_SLOTS_PER_SHIFT.get(shift_name, 1) if shift_name in ALLOW_MULTIPLE_PER_SLOT_SHIFTS else 1
+                current = shift_counts.get(shift_name, 0)
+                if current >= max_allowed:
                     logger.warning(
-                        f"Block '{label}': skipping duplicate (date={date_str}, shift={shift_name}) — already assigned"
+                        f"Block '{label}': skipping (date={date_str}, shift={shift_name}) — already {current} assigned (max={max_allowed})"
                     )
                     continue
                 merged[date_str].append((shift_name, person_name))
-                existing_shifts.add(shift_name)
+                shift_counts[shift_name] = current + 1
 
         logger.info(f"Block '{label}' scheduled: {sum(len(v) for v in block_schedule.values())} assignments, cursor→{new_cursor:.2f}")
 
@@ -551,21 +619,109 @@ def calculate_fairness_metrics(
 # Helpers
 # ---------------------------------------------------------------------------
 
+def _cycle_week(d: date, cycle_start: date) -> int:
+    """Return 0 = first week of cycle, 1 = second week. Cycle repeats every 2 weeks."""
+    return ((d - cycle_start).days // 7) % 2
+
+
+def _build_remote_gen_cycle_dates(
+    dates: List[date],
+    cycle_start: date,
+    cycle_weekdays: Dict[int, Dict[int, int]],
+) -> List[date]:
+    """
+    Build list of dates for Remote-Gen from 2-week cycle rules.
+    Each date is repeated n_slots times (e.g. Week 2 Mon repeated 2).
+    """
+    out: List[date] = []
+    for d in dates:
+        if d.weekday() >= 5:
+            continue
+        cw = _cycle_week(d, cycle_start)
+        wd = d.weekday()
+        slots = cycle_weekdays.get(cw, {}).get(wd, 0)
+        for _ in range(slots):
+            out.append(d)
+    return out
+
+
+def _build_weekend_pairs(weekend_dates: List[date]) -> List[Tuple[date, date]]:
+    """
+    Group weekend_dates (chronological Sat, Sun, Sat, Sun, ...) into (sat, sun) pairs.
+    Drops any trailing Saturday without a Sunday.
+    """
+    pairs: List[Tuple[date, date]] = []
+    i = 0
+    while i + 1 < len(weekend_dates):
+        sat = weekend_dates[i]
+        sun = weekend_dates[i + 1]
+        if sat.weekday() == 5 and sun.weekday() == 6:
+            pairs.append((sat, sun))
+            i += 2
+        else:
+            i += 1
+    return pairs
+
+
+def _schedule_ir_call_mirrored(
+    people: List[Dict[str, Any]],
+    weekend_pairs: List[Tuple[date, date]],
+    cursor: float,
+    vacation_map: Optional[Dict[str, List[str]]] = None,
+) -> Tuple[Schedule, float]:
+    """
+    Assign one IR staff per weekend to both Saturday and Sunday (mirrored).
+    Returns (schedule, new_cursor).
+    """
+    if vacation_map is None:
+        vacation_map = {}
+    people_sorted = sorted(people, key=lambda p: p["index"])
+    N = len(people_sorted)
+    if N == 0:
+        return {}, cursor
+
+    schedule: Schedule = {}
+    float_cursor = float(cursor)
+    for sat, sun in weekend_pairs:
+        sat_str = sat.isoformat()
+        sun_str = sun.isoformat()
+        unavailable_sat = set(vacation_map.get(sat_str, []))
+        unavailable_sun = set(vacation_map.get(sun_str, []))
+        unavailable_both = unavailable_sat | unavailable_sun
+        start_pos = int(math.floor(float_cursor)) % N
+        person = None
+        for offset in range(N):
+            pos = (start_pos + offset) % N
+            p = people_sorted[pos]
+            if p["name"] in unavailable_both:
+                continue
+            person = p
+            break
+        float_cursor += 1.0  # advance cursor by one IR-CALL weight per weekend
+        name = person["name"] if person else "UNFILLED"
+        schedule[sat_str] = [("IR-CALL", name)]
+        schedule[sun_str] = [("IR-CALL", name)]
+    return schedule, float_cursor
+
+
 def _filter_pool(
     roster: List[Dict[str, Any]],
     pool_filter: Optional[str],
     subspecialty_gate: Optional[str] = None,
     exclude_ir: bool = False,
+    require_participates_mri: bool = False,
+    require_participates_pet: bool = False,
 ) -> List[Dict[str, Any]]:
     """
-    Filter roster by pool membership and optional subspecialty gate.
+    Filter roster by pool membership, optional subspecialty gate, and MRI/PET participation.
 
     Args:
         pool_filter:      Roster key that must be True (e.g. 'participates_mercy').
-        subspecialty_gate: Required subspecialty tag (e.g. 'ir', 'MRI').
+        subspecialty_gate: Required subspecialty tag (e.g. 'ir', 'MRI', 'Breast-Proc').
         exclude_ir:       Hard-exclude participates_ir=True staff regardless of
-                          any other flag. Enforces that IR staff never appear in
-                          mercy/weekend blocks even if they share a gen pool key.
+                          any other flag.
+        require_participates_mri: If True, only staff with participates_MRI=True.
+        require_participates_pet: If True, only staff with participates_PET=True.
     """
     result = roster
     if pool_filter:
@@ -578,6 +734,10 @@ def _filter_pool(
             p for p in result
             if gate in [s.lower() for s in p.get("subspecialties", [])]
         ]
+    if require_participates_mri:
+        result = [p for p in result if p.get("participates_MRI", False)]
+    if require_participates_pet:
+        result = [p for p in result if p.get("participates_PET", False)]
     return result
 
 

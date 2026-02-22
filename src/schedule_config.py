@@ -170,7 +170,7 @@ SHIFT_DEFINITIONS: Dict[str, Dict[str, Any]] = {
     # ── Washington site ───────────────────────────────────────────────────────
     "Wash-MRI":    {"hours": 8,   "weight": 1.00, "pool": "mri",     "requires": "MRI+Proc",
                     "description": "IHS Washington MRI 0800-1700"},
-    "Wash-Breast": {"hours": 8,   "weight": 1.00, "pool": "breast",  "requires": "MG",
+    "Wash-Breast": {"hours": 8,   "weight": 1.00, "pool": "breast",  "requires": "Breast-Proc",
                     "description": "IHS Washington Breast & US 0800-1700"},
     "Wash-Gen":    {"hours": 8,   "weight": 1.00, "pool": "gen",     "requires": "Gen",
                     "description": "IHS Washington General"},
@@ -184,7 +184,7 @@ SHIFT_DEFINITIONS: Dict[str, Dict[str, Any]] = {
                     "description": "IHS Poway General 0800-1700"},
 
     # ── Encinitas site ────────────────────────────────────────────────────────
-    "Enc-Breast":  {"hours": 8,   "weight": 1.00, "pool": "breast",  "requires": "MG",
+    "Enc-Breast":  {"hours": 8,   "weight": 1.00, "pool": "breast",  "requires": "Breast-Proc",
                     "description": "IHS Encinitas Breast & US 0800-1700"},
     "Enc-MRI":     {"hours": 8,   "weight": 1.00, "pool": "mri",     "requires": "MRI",
                     "description": "IHS Encinitas MRI 0800-1700"},
@@ -207,9 +207,9 @@ SHIFT_DEFINITIONS: Dict[str, Dict[str, Any]] = {
     "Wknd-PET":    {"hours": 8,   "weight": 1.00, "pool": "pet",     "requires": "PET",
                     "description": "Weekend IHS PET"},
 
-    # ── O'Toole (MG-qualified + DA) ───────────────────────────────────────────
-    "O'Toole":     {"hours": 8,   "weight": 1.00, "pool": "mg",      "requires": "MG",
-                    "description": "Scripps O'Toole Breast Center 0730-1630 (Tue/Wed/Fri)"},
+    # ── O'Toole (Breast-Proc only, Mon/Tue/Wed) ────────────────────────────────
+    "O'Toole":     {"hours": 8,   "weight": 1.00, "pool": "mg",      "requires": "Breast-Proc",
+                    "description": "Scripps O'Toole Breast Center 0730-1630 (Mon/Tue/Wed only)"},
 
     # ── Fixed subspecialty — NOT managed by rotation engine ───────────────────
     "Skull-Base":  {"hours": 8,   "weight": 0.00, "pool": None,      "requires": "neuro",
@@ -225,6 +225,34 @@ SHIFT_DEFINITIONS: Dict[str, Dict[str, Any]] = {
     "No-Call":     {"hours": 0,   "weight": 0.00, "pool": None,      "requires": None},
     "No-EP":       {"hours": 0,   "weight": 0.00, "pool": None,      "requires": None},
 }
+
+# Fixed day-of-week constraints (apply every week): task -> allowed weekday set (0=Mon .. 6=Sun).
+# Used to filter block_dates and to validate assignments.
+TASK_FIXED_WEEKDAYS: Dict[str, Set[int]] = {
+    "Enc-Breast":  {1, 2},       # Tue, Wed
+    "Enc-MRI":     {0},         # Mon
+    "Enc-Gen":     {3, 4},      # Thu, Fri
+    "Poway-Gen":   {0, 1},      # Mon, Tue
+    "Poway-MRI":   {2},         # Wed
+    "Poway-PET":   {3, 4},      # Thu, Fri
+    "NC-Gen":      {0, 1, 2, 3, 4},  # Mon–Fri (week 1); week 2 further restricted to Mon–Tue only
+    "Wash-Breast": {0, 4},      # Mon, Fri
+    "Wash-MRI":    {1, 2, 3},   # Tue, Wed, Thu
+    "IR-CALL":     {5, 6},      # Sat, Sun only (mirrored: same person both days per weekend)
+    "Skull-Base":  {4},         # Friday only (e.g. Neuro Friday group)
+}
+
+# 2-week cycle: 0 = first week of cycle, 1 = second. Cycle week = (date - cycle_start).days // 7 % 2.
+# Per-task (cycle_week, weekdays_with_slots): cycle_week -> {weekday: slots_count}
+REMOTE_GEN_CYCLE_WEEKDAYS: Dict[int, Dict[int, int]] = {
+    0: {0: 1, 1: 1, 4: 1},   # Week 1: Mon 1, Tue 1, Fri 1
+    1: {0: 2, 1: 2, 2: 1, 3: 2},  # Week 2: Mon 2, Tue 2, Wed 1, Thu 2
+}
+NC_GEN_WEEK2_WEEKDAYS: Set[int] = {0, 1}   # Week 2: NC-Gen only Mon, Tue
+
+# Shifts that may have multiple staff per (date, shift) — e.g. Remote-Gen Week 2 Mon/Tue/Thu.
+ALLOW_MULTIPLE_PER_SLOT_SHIFTS: Set[str] = frozenset({"Remote-Gen"})
+MAX_SLOTS_PER_SHIFT: Dict[str, int] = {"Remote-Gen": 2}
 
 # Shifts that count as "one outpatient assignment" — at most one per person per day.
 # Excludes inpatient (M0,M1,M2,M3), IR, weekend inpatient (EP,Dx-CALL,M0_WEEKEND),
@@ -381,41 +409,44 @@ GEN_IR_CONFIG    = {**_gen_cfg("gen_ir",    exclude_ir=False),
 
 # Outpatient remote — demand-based slots per week from real schedule analysis
 REMOTE_MRI_CONFIG    = {**_outpt_cfg(["Remote-MRI"],   {"Remote-MRI":1.00},   "remote_mri",   "mri"),
-                        "slots_per_week": 3}   # ~34/13 weeks
+                        "slots_per_week": 3, "require_participates_mri": True}   # ~34/13 weeks
 REMOTE_BREAST_CONFIG = {**_outpt_cfg(["Remote-Breast"],{"Remote-Breast":1.00},"remote_breast","mg",
                                    exclude_ir=False),
                         "slots_per_week": 3}   # ~32/13 weeks; DA eligible
 REMOTE_PET_CONFIG    = {**_outpt_cfg(["Remote-PET"],   {"Remote-PET":1.00},   "remote_pet",   "pet"),
-                        "slots_per_week": 2}   # ~15/13 weeks
+                        "slots_per_week": 2, "require_participates_pet": True}   # ~15/13 weeks
 
-# Site-based — MRI (Wash-MRI requires MRI+Proc per roster; others require MRI)
-WASH_MRI_CONFIG  = _outpt_cfg(["Wash-MRI"], {"Wash-MRI":1.00}, "site_mri", "mri+proc")
-ENC_MRI_CONFIG   = _outpt_cfg(["Enc-MRI"],  {"Enc-MRI":1.00},  "site_mri", "mri")
-POWAY_MRI_CONFIG = _outpt_cfg(["Poway-MRI"],{"Poway-MRI":1.00},"site_mri", "mri")
+# Site-based — MRI (wired to participates_MRI; Wash-MRI requires MRI+Proc; others require MRI)
+WASH_MRI_CONFIG  = {**_outpt_cfg(["Wash-MRI"], {"Wash-MRI":1.00}, "site_mri", "mri+proc"), "require_participates_mri": True}
+ENC_MRI_CONFIG   = {**_outpt_cfg(["Enc-MRI"],  {"Enc-MRI":1.00},  "site_mri", "mri"), "require_participates_mri": True}
+POWAY_MRI_CONFIG = {**_outpt_cfg(["Poway-MRI"],{"Poway-MRI":1.00},"site_mri", "mri"), "require_participates_mri": True}
 
-# Site-based — Breast
-WASH_BREAST_CONFIG  = _outpt_cfg(["Wash-Breast"], {"Wash-Breast":1.00}, "site_breast","mg",
+# Site-based — Breast (HARD: Breast-Proc tag required)
+WASH_BREAST_CONFIG  = _outpt_cfg(["Wash-Breast"], {"Wash-Breast":1.00}, "site_breast","Breast-Proc",
                                   exclude_ir=False)  # DA eligible
-ENC_BREAST_CONFIG   = _outpt_cfg(["Enc-Breast"],  {"Enc-Breast":1.00},  "site_breast","mg",
+ENC_BREAST_CONFIG   = _outpt_cfg(["Enc-Breast"],  {"Enc-Breast":1.00},  "site_breast","Breast-Proc",
                                   exclude_ir=False)   # DA eligible
 POWAY_BREAST_CONFIG = _outpt_cfg(["NC-Breast"],   {"NC-Breast":1.00},   "site_breast","mg",
                                   exclude_ir=True)
 
-# Site-based — PET
-POWAY_PET_CONFIG = _outpt_cfg(["Poway-PET"],{"Poway-PET":1.00},"site_pet","pet")
+# Site-based — PET (wired to participates_PET)
+POWAY_PET_CONFIG = {**_outpt_cfg(["Poway-PET"],{"Poway-PET":1.00},"site_pet","pet"), "require_participates_pet": True}
 
-# Site-based — Gen (IR staff eligible for all Gen sites)
-ENC_GEN_CONFIG   = _outpt_cfg(["Enc-Gen"], {"Enc-Gen":1.00}, "site_gen","gen", exclude_ir=False)
-POWAY_GEN_CONFIG = _outpt_cfg(["Poway-Gen"],{"Poway-Gen":1.00},"site_gen","gen",exclude_ir=False)
+# Site-based — Gen (SOFT prefer: North_Gen+Cont for Enc/Poway, South_Gen+Cont for NC)
+ENC_GEN_CONFIG   = {**_outpt_cfg(["Enc-Gen"], {"Enc-Gen":1.00}, "site_gen","gen", exclude_ir=False),
+                    "preferred_subspecialty": "North_Gen+Cont"}
+POWAY_GEN_CONFIG = {**_outpt_cfg(["Poway-Gen"],{"Poway-Gen":1.00},"site_gen","gen",exclude_ir=False),
+                    "preferred_subspecialty": "North_Gen+Cont"}
 NC_GEN_CONFIG    = {**_outpt_cfg(["NC-Gen"],  {"NC-Gen":1.00},  "site_gen","gen", exclude_ir=False),
-                    "slots_per_week": 2}   # ~15/13 weeks in real schedule
+                    "slots_per_week": 2,
+                    "preferred_subspecialty": "South_Gen+Cont"}   # ~15/13 weeks in real schedule
 
-# O'Toole — MG-tagged staff (DA + non-IR MG). Tue/Wed/Fri only.
-OTOOLE_WEEKDAYS = {1, 2, 4}   # Tuesday=1, Wednesday=2, Friday=4 (Monday=0)
+# O'Toole — Breast-Proc only, Mon/Tue/Wed only.
+OTOOLE_WEEKDAYS = {0, 1, 2}   # Monday=0, Tuesday=1, Wednesday=2
 OTOOLE_CONFIG = {
     "pool_filter":        "participates_mg",
-    "exclude_ir":         False,             # DA is MG-qualified
-    "subspecialty_gate":  "mg",
+    "exclude_ir":         False,             # DA eligible if Breast-Proc
+    "subspecialty_gate":  "Breast-Proc",
     "shift_names":        ["O'Toole"],
     "shift_weights":      {"O'Toole": 1.00},
     "shifts_per_period":  1,
@@ -425,15 +456,32 @@ OTOOLE_CONFIG = {
     "use_weighted_cursor": True,
     "target_cv":          0.10,
     "schedule_type":      "weekday",
-    "allowed_weekdays":   OTOOLE_WEEKDAYS,   # Tue, Wed, Fri only
-    "description":        "Scripps O'Toole (Tue/Wed/Fri only)",
+    "allowed_weekdays":   OTOOLE_WEEKDAYS,   # Mon, Tue, Wed only
+    "description":        "Scripps O'Toole (Mon/Tue/Wed only)",
 }
 
-# Weekend outpatient
-WKND_MRI_CONFIG = _outpt_cfg(["Wknd-MRI"],{"Wknd-MRI":1.00},"wknd_mri","mri",
-                               schedule_type="weekend")
-WKND_PET_CONFIG = _outpt_cfg(["Wknd-PET"],{"Wknd-PET":1.00},"wknd_pet","pet",
-                               schedule_type="weekend")
+# Weekend outpatient (wired to participates_MRI / participates_PET)
+WKND_MRI_CONFIG = {**_outpt_cfg(["Wknd-MRI"],{"Wknd-MRI":1.00},"wknd_mri","mri",
+                               schedule_type="weekend"), "require_participates_mri": True}
+WKND_PET_CONFIG = {**_outpt_cfg(["Wknd-PET"],{"Wknd-PET":1.00},"wknd_pet","pet",
+                               schedule_type="weekend"), "require_participates_pet": True}
+
+# Neuro Friday — round-robin among neuro-tagged staff, every Friday only (for dry_run group3)
+NEURO_FRIDAY_CONFIG = {
+    "pool_filter":        "participates_gen",   # broad; gate restricts to neuro
+    "exclude_ir":         True,
+    "subspecialty_gate":  "neuro",
+    "shift_names":        ["Skull-Base"],
+    "shift_weights":      {"Skull-Base": 1.00},
+    "shifts_per_period":  1,
+    "cursor_key":         "neuro_friday",
+    "avoid_previous":     False,
+    "allow_fallback":     True,
+    "use_weighted_cursor": True,
+    "target_cv":          0.10,
+    "schedule_type":      "weekday",
+    "allowed_weekdays":   {4},   # Friday only
+}
 
 # ---------------------------------------------------------------------------
 # SCHEDULING_BLOCKS — Priority order
@@ -469,26 +517,26 @@ SCHEDULING_BLOCKS: List[Dict[str, Any]] = [
      "can_skip": False, "exclude_ir": True,
      "interactive_prompt": "Schedule M1 and M2?"},
 
-    # ── 6. O'Toole (Tue/Wed/Fri) — concurrent: can do with inpatient same day ─
+    # ── 6. O'Toole (Mon/Tue/Wed, Breast-Proc only) — concurrent ─────────────────
     {"block_id": "otoole", "label": "O'Toole",
      "config": OTOOLE_CONFIG, "priority": 6,
-     "can_skip": True, "exclude_ir": False,  # DA eligible
-     "subspecialty_gate": "mg",
+     "can_skip": True, "exclude_ir": False,  # DA eligible if Breast-Proc
+     "subspecialty_gate": "Breast-Proc",
      "concurrent_ok": True,   # outpatient: fill pool; one exclusive + outpatient allowed
      "interactive_prompt": "Schedule O'Toole?"},
      
-    # ── 7. Site-based Breast ─────────────────────────────────────────────────
+    # ── 7. Site-based Breast (HARD: Breast-Proc tag required) ───────────────────
     {"block_id": "wash_breast", "label": "Washington Breast",
      "config": WASH_BREAST_CONFIG, "priority": 7,
      "can_skip": True, "exclude_ir": False,  # DA eligible
-     "subspecialty_gate": "mg",
+     "subspecialty_gate": "Breast-Proc",
      "concurrent_ok": True,
      "interactive_prompt": "Schedule Washington Breast?"},
 
     {"block_id": "enc_breast", "label": "Encinitas Breast",
      "config": ENC_BREAST_CONFIG, "priority": 8,
      "can_skip": True, "exclude_ir": True,
-     "subspecialty_gate": "mg",
+     "subspecialty_gate": "Breast-Proc",
      "concurrent_ok": True,
      "interactive_prompt": "Schedule Encinitas Breast?"},
 
@@ -601,7 +649,23 @@ SCHEDULING_BLOCKS: List[Dict[str, Any]] = [
      "subspecialty_gate": "pet",
      "concurrent_ok": True,
      "interactive_prompt": "Schedule Weekend PET?"},
+
+    # ── Neuro Friday (round-robin, dry_run group3) ─────────────────────────────
+    {"block_id": "neuro_friday", "label": "Neuro Friday (Skull-Base)",
+     "config": NEURO_FRIDAY_CONFIG, "priority": 24,
+     "can_skip": True, "exclude_ir": True,
+     "subspecialty_gate": "neuro",
+     "concurrent_ok": True,
+     "interactive_prompt": "Schedule Neuro (Skull-Base) Fridays?"},
 ]
+
+# Dry-run --group: named groups of block_ids for grouped scheduling
+DRY_RUN_GROUPS: Dict[str, List[str]] = {
+    "group1": ["ir_weekday", "ir_call", "m3_weekday"],
+    "group2": ["m0_weekday", "m1m2_weekday", "otoole", "wash_breast", "enc_breast"],
+    "group3": ["neuro_friday"],
+    "group4": ["wknd_mri", "wknd_pet"],
+}
 
 # ---------------------------------------------------------------------------
 # Cursor state keys — all blocks need an entry in cursor_state.json
@@ -623,6 +687,7 @@ CONSTRAINT_WEIGHTS: Dict[str, Any] = {
     "multiple_outpatient_same_day": {"severity": "hard", "penalty": 9999},
     "two_weekday_tasks":          {"severity": "hard",  "penalty": 9999},
     "subspecialty_mismatch":      {"severity": "hard",  "penalty": 9999},
+    "task_day_of_week":           {"severity": "hard",  "penalty": 9999},
     "ir_pool_gate":               {"severity": "hard",  "penalty": 9999},
     "mercy_pool_gate":            {"severity": "hard",  "penalty": 9999},
     "weekend_pool_gate":          {"severity": "hard",  "penalty": 9999},
