@@ -338,6 +338,24 @@ def schedule_blocks(
             block_dates = weekend_dates
         else:
             block_dates = dates
+        # Optional: restrict to specific weekdays (e.g. O'Toole Tue/Wed/Fri only)
+        allowed_weekdays = config.get("allowed_weekdays")
+        if allowed_weekdays is not None and block_dates:
+            block_dates = [d for d in block_dates if d.weekday() in allowed_weekdays]
+            logger.debug(f"Block '{label}': filtered to weekdays {allowed_weekdays} → {len(block_dates)} dates")
+        # Optional: cap weekdays per week (demand-based; reduces UNFILLED for outpatient)
+        slots_per_week = config.get("slots_per_week")
+        if slots_per_week is not None and block_dates and schedule_type == "weekday":
+            from itertools import groupby
+            def week_key(d):
+                return d.isocalendar()[0], d.isocalendar()[1]  # year, week
+            block_dates_sorted = sorted(block_dates)
+            limited = []
+            for (_y, _w), week_dates in groupby(block_dates_sorted, key=week_key):
+                week_list = list(week_dates)
+                limited.extend(week_list[: int(slots_per_week)])
+            block_dates = limited
+            logger.debug(f"Block '{label}': slots_per_week={slots_per_week} → {len(block_dates)} dates")
         if not block_dates:
             logger.info(f"Block '{label}': no dates — skipping")
             continue
@@ -349,8 +367,9 @@ def schedule_blocks(
 
         # Build augmented vacation map: existing vacation PLUS names already
         # assigned in earlier blocks on each date (prevents double-booking).
-        # Blocks with concurrent_ok=True bypass this (outpatient is concurrent
-        # with inpatient in the real schedule).
+        # Hard: No IR weekday + Gen same day; no radiologist with 2 distinct weekday tasks.
+        _IR_WEEKDAY_SHIFTS = {"IR-1", "IR-2"}
+        _EXCLUSIVE_WEEKDAY_SHIFTS = {"M0", "M1", "M2", "M3", "IR-1", "IR-2"}
         augmented_vacation = {}
         for d in (vacation_map or {}):
             augmented_vacation[d] = list(vacation_map.get(d, []))
@@ -362,6 +381,45 @@ def schedule_blocks(
                         augmented_vacation[date_str] = []
                     augmented_vacation[date_str] = list(set(
                         augmented_vacation.get(date_str, []) + prior_names
+                    ))
+        # Always exclude IR-1/IR-2 assignees from all other blocks on that date
+        for date_str, prior_assignments in merged.items():
+            ir_weekday_names = [
+                name for shift, name in prior_assignments
+                if name != "UNFILLED" and shift in _IR_WEEKDAY_SHIFTS
+            ]
+            if ir_weekday_names:
+                if date_str not in augmented_vacation:
+                    augmented_vacation[date_str] = []
+                augmented_vacation[date_str] = list(set(
+                    augmented_vacation.get(date_str, []) + ir_weekday_names
+                ))
+        # No radiologist may cover 2 distinct weekday tasks: exclude anyone with
+        # any exclusive weekday shift (M0,M1,M2,M3,IR-1,IR-2) from other blocks that day.
+        for date_str, prior_assignments in merged.items():
+            exclusive_names = [
+                name for shift, name in prior_assignments
+                if name != "UNFILLED" and shift in _EXCLUSIVE_WEEKDAY_SHIFTS
+            ]
+            if exclusive_names:
+                if date_str not in augmented_vacation:
+                    augmented_vacation[date_str] = []
+                augmented_vacation[date_str] = list(set(
+                    augmented_vacation.get(date_str, []) + exclusive_names
+                ))
+        # Outpatient blocks: at most one outpatient assignment per person per day
+        if concurrent_ok:
+            from src.schedule_config import OUTPATIENT_SHIFTS
+            for date_str, prior_assignments in merged.items():
+                prior_outpatient_names = [
+                    name for shift, name in prior_assignments
+                    if name != "UNFILLED" and shift in OUTPATIENT_SHIFTS
+                ]
+                if prior_outpatient_names:
+                    if date_str not in augmented_vacation:
+                        augmented_vacation[date_str] = []
+                    augmented_vacation[date_str] = list(set(
+                        augmented_vacation.get(date_str, []) + prior_outpatient_names
                     ))
 
         block_schedule, new_cursor = schedule_period(
@@ -379,11 +437,20 @@ def schedule_blocks(
 
         cursor_state[cursor_key] = new_cursor
 
-        # Merge into master schedule
+        # Merge into master schedule — at most one assignment per (date, shift)
+        # to prevent two radiologists on the same task in exports.
         for date_str, assignments in block_schedule.items():
             if date_str not in merged:
                 merged[date_str] = []
-            merged[date_str].extend(assignments)
+            existing_shifts = {shift for shift, _ in merged[date_str]}
+            for shift_name, person_name in assignments:
+                if shift_name in existing_shifts:
+                    logger.warning(
+                        f"Block '{label}': skipping duplicate (date={date_str}, shift={shift_name}) — already assigned"
+                    )
+                    continue
+                merged[date_str].append((shift_name, person_name))
+                existing_shifts.add(shift_name)
 
         logger.info(f"Block '{label}' scheduled: {sum(len(v) for v in block_schedule.values())} assignments, cursor→{new_cursor:.2f}")
 
@@ -415,9 +482,11 @@ def calculate_fairness_metrics(
 
     if shift_weights is None:
         shift_weights = {k: v["weight"] for k, v in SHIFT_DEFINITIONS.items()}
+    shift_hours = {k: v.get("hours", 8) for k, v in SHIFT_DEFINITIONS.items()}
 
     raw_counts: Dict[str, int] = {p["name"]: 0 for p in people}
     weighted_counts: Dict[str, float] = {p["name"]: 0.0 for p in people}
+    hours_counts: Dict[str, float] = {p["name"]: 0.0 for p in people}
     per_shift: Dict[str, Dict[str, int]] = {}
     unfilled = 0
 
@@ -433,6 +502,8 @@ def calculate_fairness_metrics(
             raw_counts[person_name] += 1
             w = shift_weights.get(shift_name, 1.0)
             weighted_counts[person_name] += w
+            hrs = shift_hours.get(shift_name, 8)
+            hours_counts[person_name] += hrs
 
             if shift_name not in per_shift:
                 per_shift[shift_name] = {p["name"]: 0 for p in people}
@@ -444,6 +515,12 @@ def calculate_fairness_metrics(
     variance = sum((v - mean_val) ** 2 for v in values) / len(values) if values else 0.0
     std_val = math.sqrt(variance)
     cv = (std_val / mean_val * 100) if mean_val > 0 else 0.0
+
+    hours_values = list(hours_counts.values())
+    hours_mean = sum(hours_values) / len(hours_values) if hours_values else 0.0
+    hours_variance = sum((v - hours_mean) ** 2 for v in hours_values) / len(hours_values) if hours_values else 0.0
+    hours_std = math.sqrt(hours_variance)
+    hours_cv = (hours_std / hours_mean * 100) if hours_mean > 0 else 0.0
 
     per_shift_cv: Dict[str, float] = {}
     for shift, counts in per_shift.items():
@@ -460,6 +537,10 @@ def calculate_fairness_metrics(
         "max": max(values) if values else 0,
         "counts": raw_counts,
         "weighted_counts": weighted_counts,
+        "hours_counts": hours_counts,
+        "hours_mean": hours_mean,
+        "hours_std": hours_std,
+        "hours_cv": hours_cv,
         "per_shift": per_shift,
         "per_shift_cv": per_shift_cv,
         "unfilled": unfilled,

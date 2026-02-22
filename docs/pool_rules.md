@@ -1,6 +1,6 @@
 # Radiology Scheduler — Pool Membership & Assignment Rules
 
-**Version:** 3.0.0  
+**Version:** 3.1.0  
 **Last Updated:** 2026-02-21  
 **Source of truth:** `roster_key.csv`, `schedule_config.py`
 
@@ -41,18 +41,18 @@ engine-level `exclude_ir` gate (`schedule_config.py`). Both must pass.
 
 | Initials | Name | Subspecialty Tags |
 |---|---|---|
-| BT | Brian Trinh | neuro, cardiac, nm, MRI, Gen, Proc |
+| BT | Brian Trinh | neuro, cardiac, nm, MRI, Gen, MRI+Proc |
 | EC | Eric Chou | MRI, Gen |
 | EK | Eric Kim | PET, MG, Gen |
-| EL | Eric Lizerbram | MRI, Gen |
-| GA | Gregory Anderson | MRI, Gen |
-| JC | James Cooper | MG, MRI, Gen, neuro |
+| EL | Eric Lizerbram | MRI, Gen, MRI+Proc |
+| GA | Gregory Anderson | MRI, Gen, MRI+Proc |
+| JC | James Cooper | MG, MRI, Gen, neuro, MRI+Proc |
 | JJ | John Johnson | MG, Gen, cardiac |
-| JV | JuanCarlos Vera | neuro, nm, MRI, Gen, Proc |
-| KY | Karen Yuan | MRI, Gen, Proc, MG |
+| JCV | JuanCarlos Vera | neuro, nm, MRI, Gen, MRI+Proc |
+| KY | Karen Yuan | MRI, Gen, MRI+Proc, MG |
 | KR | Kriti Rishi | MG, Gen |
 | MS | Mark Schechter | nm, Gen, MG |
-| MB | Michael Booker | MRI, PET, Gen, Proc |
+| MB | Michael Booker | MRI, MRI+Proc, PET, Gen, Proc |
 | MG | Michael Grant | PET, Gen |
 | RT | Rowena Tena | MG, Gen |
 | YR | Yonatan Rotman | PET, Gen |
@@ -61,7 +61,7 @@ engine-level `exclude_ir` gate (`schedule_config.py`). Both must pass.
 - ✅ M0, M1, M2, M3
 - ✅ M0_WEEKEND, EP, Dx-CALL
 - ✅ Gen shifts (all have `Gen` tag)
-- ✅ MRI shifts if they have `MRI` tag (BT, EC, EL, GA, JC, JV, KY, MB)
+- ✅ MRI shifts if they have `MRI` tag (BT, EC, EL, GA, JC, JCV, KY, MB); **Wash-MRI** requires `MRI+Proc` (EL, GA, JC, JCV, KY, MB)
 - ✅ Breast/O'Toole if they have `MG` tag (EK, JC, JJ, KR, KY, MS, RT)
 - ✅ PET shifts if they have `PET` tag (EK, MB, MG, YR)
 
@@ -82,6 +82,7 @@ engine-level `exclude_ir` gate (`schedule_config.py`). Both must pass.
 | EP / Dx-CALL / M0_WEEKEND | ❌ | ❌ | ✅ | ✅ | ✅ | ✅ |
 | Remote-Gen / Site Gen | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 | Remote-MRI / Site MRI | ❌ | ❌ | ✅ | depends | depends | ❌ |
+| Wash-MRI (Washington MRI) | ❌ | ❌ | ❌ | ✅ (MRI+Proc only) | ❌ | ❌ |
 | Remote-Breast / Site Breast | ✅ | ❌ | depends | ✅ | depends | ❌ |
 | O'Toole | ✅ | ❌ | depends | ✅ | depends | ❌ |
 | Remote-PET / Site PET | ❌ | ❌ | depends | depends | ✅ | ❌ |
@@ -147,9 +148,12 @@ These appear in QGenda but are excluded from CV calculations (weight = 0.00).
 
 ## O'Toole Rules
 
-- Runs **Tuesday, Wednesday, Friday only** (weekdays 1, 2, 4 in Python's 0=Mon).
+- Runs **Tuesday, Wednesday, Friday only** (weekdays 1, 2, 4 in Python's 0=Mon). The block scheduler applies `allowed_weekdays` so O'Toole is never scheduled on Mon/Thu.
 - Pool: `participates_mg=yes` + `MG` subspecialty tag.
 - Eligible staff: DA, EK, JC, JJ, KR, KY, MS, RT (8 total).
 - Concurrent with any primary rotation assignment.
-- Current engine schedules O'Toole on all weekdays — weekday filter
-  (`OTOOLE_WEEKDAYS`) is defined but not yet wired in. Planned for v3.1.
+
+## Wash-MRI (Washington MRI)
+
+- Staffed only by radiologists with the **MRI+Proc** subspecialty tag in `roster_key.csv`.
+- Eligible staff: EL, GA, JC, JCV, KY, MB (6 with MRI+Proc). Other MRI-tagged staff are not eligible for Wash-MRI.

@@ -1,6 +1,6 @@
 # Radiology Scheduler — Operations Guide
 
-**Version:** 3.0.0  
+**Version:** 3.1.0  
 **Last Updated:** 2026-02-21
 
 ---
@@ -31,9 +31,10 @@ Required:
   --end   YYYY-MM-DD    Schedule end date (inclusive)
 
 Optional:
-  --out DIR             Output directory (default: ./outputs)
+  --output-dir DIR      Output directory (default: ./outputs)
   --interactive         Pause before each scheduling block for review
   --save-cursors        Persist final cursor positions to cursor_state.json
+  --visual              Generate matplotlib charts (shift/hours distribution, deviation, task breakdown)
 ```
 
 ### Example Runs
@@ -48,8 +49,11 @@ python -m src.dry_run --start 2026-04-01 --end 2026-06-30 --save-cursors
 # Review each block interactively before committing
 python -m src.dry_run --start 2026-04-01 --end 2026-06-30 --interactive
 
+# With visual analysis (matplotlib charts)
+python -m src.dry_run --start 2026-04-01 --end 2026-06-30 --visual
+
 # Custom output directory
-python -m src.dry_run --start 2026-04-01 --end 2026-06-30 --out /tmp/q2_draft
+python -m src.dry_run --start 2026-04-01 --end 2026-06-30 --output-dir /tmp/q2_draft
 ```
 
 ---
@@ -62,15 +66,17 @@ Each run produces four files in `./outputs/` named by date range:
 |---|---|
 | `*_schedule.csv` | Long-form: one row per (date, shift, person) assignment |
 | `*_schedule.xlsx` | Pivot table: dates as rows, shifts as columns, names as values |
-| `*_fairness_report.txt` | Per-radiologist weighted workload, CV, top/bottom |
+| `*_fairness_report.txt` | Per-radiologist weighted workload, hours assigned, CV, top/bottom |
+| `*_fairness_data.json` | Programmatic fairness: weighted_cv, hours_cv, hours_counts, unfilled |
 | `*_violations.txt` | All hard and soft constraint violations with details |
+
+When run with `--visual`, additional PNGs: `*_shift_distribution.png`, `*_hours_distribution.png`, `*_shift_deviation.png`, `*_task_breakdown.png`.
 
 ### Reading the Excel Pivot
 
 - Rows = dates (Mon–Fri weekdays + Sat + Sun)
 - Columns = shift codes (IR-1, IR-2, M0, M1, M2, M3, EP, Dx-CALL, Remote-MRI, ...)
-- Multiple names in a cell = that shift had multiple concurrent assignments
-- Empty cell = shift not scheduled that day (outpatient subspecialty pool may have been exhausted)
+- Each cell = at most one staff name per (date, shift); empty = shift not scheduled or unfilled
 
 ---
 
@@ -95,8 +101,9 @@ Step 4/6: Running block scheduling
   Each block picks from its eligible pool via weighted cursor
 
 Step 5/6: Checking constraints
-  Hard: vacation, double-booking, pool gates, subspecialty mismatch
-  Soft: back-to-back weekend, CV target
+  Hard: vacation, double-booking, duplicate task (one person per date+shift),
+        IR+Gen same day, two weekday tasks per person, pool gates, subspecialty mismatch
+  Soft: back-to-back weekend, weighted CV and hours-assigned CV target
 
 Step 6/6: Exporting outputs
   CSV, Excel, fairness report, violations file
@@ -138,17 +145,28 @@ actionable. Target CV < 10% is most meaningful within the mercy and weekend pool
 
 ## Managing Vacations
 
-Edit `config/vacation_map.csv`:
+**Preferred:** Build `vacation_map.csv` from a QGenda .xlsx export so dry_run uses current exempt days (vacation, off all day, admin, No call, no ep):
 
-```csv
-name,dates
-Eric Chou,"2026-04-07,2026-04-08,2026-04-09,2026-04-10,2026-04-11"
-Karen Yuan,"2026-05-25,2026-05-26"
+```bash
+# Place your QGenda export in inputs/, then:
+python scripts/extract_vacation_map.py
+
+# Or specify input and output:
+python scripts/extract_vacation_map.py --input inputs/YourExport.xlsx --output config/vacation_map.csv
 ```
 
-- `name` must match exactly the `name` column in `roster_key.csv`
-- `dates` is a comma-separated list of ISO dates (`YYYY-MM-DD`)
-- Staff on vacation are skipped by the cursor (their position in the stream is preserved)
+**Manual edit:** `config/vacation_map.csv` format (one row per date, staff semicolon-separated):
+
+```csv
+date,unavailable_staff
+2026-04-07,Eric Chou;Karen Yuan
+2026-04-08,Eric Chou
+2026-05-25,Karen Yuan
+```
+
+- `date` = `YYYY-MM-DD`
+- `unavailable_staff` = semicolon-separated full names matching `roster_key.csv` exactly
+- Staff listed on a date are skipped by the cursor for that date (stream position preserved)
 
 ---
 
@@ -172,7 +190,8 @@ Edit `config/roster_key.csv`. Key columns:
 | Tag | Enables |
 |---|---|
 | `ir` | IR-1, IR-2, IR-CALL |
-| `MRI` | All MRI shifts (Remote, site-based, weekend) |
+| `MRI` | Remote/site/weekend MRI (except Wash-MRI) |
+| `MRI+Proc` | **Wash-MRI** (Washington MRI) — staffed only by MRI+Proc-tagged staff |
 | `MG` | All Breast shifts + O'Toole |
 | `PET` | All PET shifts (Remote, Poway, weekend) |
 | `Gen` | All Gen shifts (required for any outpatient Gen assignment) |
@@ -291,9 +310,6 @@ python -m pytest tests/test_full_orchestration.py::TestConstraintChecking -v
 - **QGenda API push** — `dry_run.py` currently only generates files.
 - **Outpatient rotation blocks** — Remote MRI/PET/Breast site rotation has
   per-site history weighting (Washington vs. Poway vs. Encinitas) not yet tracked.
-- **O'Toole weekday filter** — O'Toole runs Tue/Wed/Fri only. Current engine
-  schedules it on all weekdays. `OTOOLE_WEEKDAYS = {1, 2, 4}` is defined in
-  `schedule_config.py` but not yet wired to the block scheduler.
 - **FTE < 1.0 support** — All radiologists are currently 1.0 FTE. The cursor
   math supports partial FTE; needs roster data to activate.
 - **Per-pool fairness reporting** — Report IR pool CV and mercy pool CV

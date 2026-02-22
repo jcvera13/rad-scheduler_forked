@@ -7,7 +7,7 @@ id,index,initials,name,email,role,exempt_dates,fte,participates_mercy,participat
 6,5,GA,Gregory Anderson,,Radiologist,,1.0,yes,no,yes,yes,yes,no,"MRI,Gen,MRI+Proc",
 7,6,JC,James Cooper,,Radiologist,,1.0,yes,no,yes,yes,yes,yes,"MG,MRI,Gen,neuro,MRI+Proc","Skull Base subspecialist"
 8,7,JJ,John Johnson,,Radiologist,,1.0,yes,no,yes,yes,yes,yes,"MG,Gen,cardiac","Cardiac primary"
-9,8,JV,JuanCarlos Vera,,Radiologist,,1.0,yes,no,yes,yes,yes,no,"neuro,nm,MRI,Gen,MRI+Proc","Skull Base subspecialist"
+9,8,JCV,JuanCarlos Vera,,Radiologist,,1.0,yes,no,yes,yes,yes,no,"neuro,nm,MRI,Gen,MRI+Proc","Skull Base subspecialist"
 10,9,KY,Karen Yuan,,Radiologist,,1.0,yes,no,yes,yes,yes,no,"MRI,Gen,MRI+Proc",
 11,10,KR,Kriti Rishi,,Radiologist,,1.0,yes,no,yes,yes,yes,yes,"MG,Gen",
 12,11,MS,Mark Schechter,,Radiologist,,1.0,yes,no,yes,yes,yes,yes,"nm,Gen,MG",

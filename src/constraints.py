@@ -7,9 +7,9 @@ Hard constraints (must NOT violate):
   - SUBSPECIALTY_MISMATCH: IR-1/IR-2 only to IR-qualified staff
   - IR_POOL_GATE: IR shifts only from IR pool
 
-Soft constraints (minimize violations):
+Soft constraints (logged, do not block scheduling):
   - BACK_TO_BACK_WEEKEND: Avoid same staff on consecutive weekends
-  - CV_EXCEEDED: Weighted workload CV > target (10%)
+  - CV_EXCEEDED: Weighted workload CV > target (10%) — soft to ease scheduling while aiming for fairness
   - FTE_OVERLOAD: Assignments exceed FTE-proportional expected load
 
 Severity enum and ConstraintViolation dataclass are importable for
@@ -152,6 +152,174 @@ class ConstraintChecker:
                     ))
                 else:
                     exclusive_seen[person_name] = shift_name
+        return violations
+
+    # -----------------------------------------------------------------------
+    # HARD: Duplicate task assignment (same task = same date+shift, one person)
+    # -----------------------------------------------------------------------
+
+    def check_duplicate_task_assignment(self, schedule: Schedule) -> List[ConstraintViolation]:
+        """
+        Hard: Each (date, shift) must have at most one staff assigned.
+        Prevents two radiologists being assigned to the same task.
+        """
+        violations = []
+        for date_str, assignments in schedule.items():
+            by_shift: Dict[str, List[str]] = {}
+            for shift_name, person_name in assignments:
+                if person_name == "UNFILLED":
+                    continue
+                by_shift.setdefault(shift_name, []).append(person_name)
+            for shift_name, staff_list in by_shift.items():
+                unique_staff = set(staff_list)
+                if len(unique_staff) > 1:
+                    violations.append(ConstraintViolation(
+                        severity=ConstraintSeverity.HARD,
+                        constraint_type="DUPLICATE_TASK_ASSIGNMENT",
+                        description=(
+                            f"Task {shift_name} on {date_str} has multiple staff: {sorted(unique_staff)}"
+                        ),
+                        date=date_str,
+                        shift=shift_name,
+                        details={"staff": list(unique_staff)},
+                    ))
+                elif len(staff_list) > 1:
+                    violations.append(ConstraintViolation(
+                        severity=ConstraintSeverity.HARD,
+                        constraint_type="DUPLICATE_TASK_ASSIGNMENT",
+                        description=(
+                            f"Task {shift_name} on {date_str} has duplicate assignment: {staff_list[0]}"
+                        ),
+                        date=date_str,
+                        staff=staff_list[0],
+                        shift=shift_name,
+                    ))
+        return violations
+
+    # -----------------------------------------------------------------------
+    # HARD: IR weekday and Gen on same day
+    # -----------------------------------------------------------------------
+
+    _ir_weekday_shifts: frozenset = frozenset({"IR-1", "IR-2"})
+    _gen_shifts: frozenset = frozenset({
+        "Remote-Gen", "Enc-Gen", "Poway-Gen", "NC-Gen", "Wash-Gen",
+    })
+
+    def check_ir_and_gen_same_day(self, schedule: Schedule) -> List[ConstraintViolation]:
+        """Hard: No radiologist may have both an IR weekday shift and a Gen shift on the same day."""
+        violations = []
+        for date_str, assignments in schedule.items():
+            by_person: Dict[str, Set[str]] = {}
+            for shift_name, person_name in assignments:
+                if person_name == "UNFILLED":
+                    continue
+                by_person.setdefault(person_name, set()).add(shift_name)
+            for person_name, shifts in by_person.items():
+                has_ir = bool(shifts & self._ir_weekday_shifts)
+                has_gen = bool(shifts & self._gen_shifts)
+                if has_ir and has_gen:
+                    violations.append(ConstraintViolation(
+                        severity=ConstraintSeverity.HARD,
+                        constraint_type="IR_AND_GEN_SAME_DAY",
+                        description=(
+                            f"{person_name} has both IR weekday shift and Gen shift on {date_str}"
+                        ),
+                        date=date_str,
+                        staff=person_name,
+                        details={"shifts": list(shifts)},
+                    ))
+        return violations
+
+    # -----------------------------------------------------------------------
+    # HARD: IR-1 / IR-2 exclusive — cannot be assigned any other shift that day
+    # -----------------------------------------------------------------------
+
+    def check_ir_weekday_exclusive(self, schedule: Schedule) -> List[ConstraintViolation]:
+        """Hard: Staff on IR-1 or IR-2 cannot be assigned to any other shift on that date."""
+        violations = []
+        for date_str, assignments in schedule.items():
+            by_person: Dict[str, Set[str]] = {}
+            for shift_name, person_name in assignments:
+                if person_name == "UNFILLED":
+                    continue
+                by_person.setdefault(person_name, set()).add(shift_name)
+            for person_name, shifts in by_person.items():
+                has_ir_weekday = bool(shifts & self._ir_weekday_shifts)
+                if has_ir_weekday and len(shifts) > 1:
+                    violations.append(ConstraintViolation(
+                        severity=ConstraintSeverity.HARD,
+                        constraint_type="IR_WEEKDAY_EXCLUSIVE",
+                        description=(
+                            f"{person_name} on IR-1/IR-2 cannot have other shifts on {date_str}: {sorted(shifts)}"
+                        ),
+                        date=date_str,
+                        staff=person_name,
+                        details={"shifts": list(shifts)},
+                    ))
+        return violations
+
+    # -----------------------------------------------------------------------
+    # HARD: At most one outpatient assignment per person per day
+    # -----------------------------------------------------------------------
+
+    def check_one_outpatient_per_person(self, schedule: Schedule) -> List[ConstraintViolation]:
+        """Hard: A single person can only have one outpatient assignment per day (per docs)."""
+        from src.schedule_config import OUTPATIENT_SHIFTS
+
+        violations = []
+        for date_str, assignments in schedule.items():
+            by_person: Dict[str, Set[str]] = {}
+            for shift_name, person_name in assignments:
+                if person_name == "UNFILLED":
+                    continue
+                if shift_name not in OUTPATIENT_SHIFTS:
+                    continue
+                by_person.setdefault(person_name, set()).add(shift_name)
+            for person_name, outpt_shifts in by_person.items():
+                if len(outpt_shifts) > 1:
+                    violations.append(ConstraintViolation(
+                        severity=ConstraintSeverity.HARD,
+                        constraint_type="MULTIPLE_OUTPATIENT_SAME_DAY",
+                        description=(
+                            f"{person_name} has {len(outpt_shifts)} outpatient assignments on {date_str}: {sorted(outpt_shifts)}"
+                        ),
+                        date=date_str,
+                        staff=person_name,
+                        details={"shifts": list(outpt_shifts)},
+                    ))
+        return violations
+
+    # -----------------------------------------------------------------------
+    # HARD: No two distinct weekday tasks per radiologist (exclusive shifts only)
+    # -----------------------------------------------------------------------
+
+    def check_single_weekday_task_per_person(self, schedule: Schedule) -> List[ConstraintViolation]:
+        """Hard: On a weekday, no radiologist may cover more than one distinct task."""
+        violations = []
+        for date_str, assignments in schedule.items():
+            try:
+                d = date.fromisoformat(date_str)
+            except (TypeError, ValueError):
+                continue
+            if d.weekday() >= 5:
+                continue
+            by_person: Dict[str, Set[str]] = {}
+            for shift_name, person_name in assignments:
+                if person_name == "UNFILLED":
+                    continue
+                by_person.setdefault(person_name, set()).add(shift_name)
+            for person_name, shifts in by_person.items():
+                if len(shifts) > 1:
+                    violations.append(ConstraintViolation(
+                        severity=ConstraintSeverity.HARD,
+                        constraint_type="TWO_WEEKDAY_TASKS",
+                        description=(
+                            f"{person_name} has {len(shifts)} distinct weekday tasks on {date_str}: {sorted(shifts)}"
+                        ),
+                        date=date_str,
+                        staff=person_name,
+                        details={"shifts": list(shifts)},
+                    ))
         return violations
 
     # -----------------------------------------------------------------------
@@ -318,7 +486,7 @@ class ConstraintChecker:
         metrics: Dict[str, Any],
         pool_label: str = "",
     ) -> List[ConstraintViolation]:
-        """Soft: Warn if overall weighted CV exceeds target."""
+        """Soft: Warn if overall weighted CV exceeds target (10%). Does not block scheduling."""
         violations = []
         target = self.fairness_targets.get("cv_target", 0.10)
         cv = metrics.get("cv", 0) / 100  # cv stored as percentage
@@ -381,6 +549,11 @@ class ConstraintChecker:
 
         hard.extend(self.check_vacation(schedule))
         hard.extend(self.check_double_booking(schedule))
+        hard.extend(self.check_duplicate_task_assignment(schedule))
+        hard.extend(self.check_ir_and_gen_same_day(schedule))
+        hard.extend(self.check_ir_weekday_exclusive(schedule))
+        hard.extend(self.check_one_outpatient_per_person(schedule))
+        hard.extend(self.check_single_weekday_task_per_person(schedule))
         hard.extend(self.check_subspecialty_qualification(schedule))
         hard.extend(self.check_ir_pool_gate(schedule))
         hard.extend(self.check_mercy_pool_gate(schedule))

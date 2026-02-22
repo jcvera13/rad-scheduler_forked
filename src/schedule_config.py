@@ -226,13 +226,34 @@ SHIFT_DEFINITIONS: Dict[str, Dict[str, Any]] = {
     "No-EP":       {"hours": 0,   "weight": 0.00, "pool": None,      "requires": None},
 }
 
+# Shifts that count as "one outpatient assignment" — at most one per person per day.
+# Excludes inpatient (M0,M1,M2,M3), IR, weekend inpatient (EP,Dx-CALL,M0_WEEKEND),
+# and fixed concurrent (Skull-Base, Cardiac). See docs/qgenda_integration.md, 2wk_snapshot.
+OUTPATIENT_SHIFTS: Set[str] = frozenset({
+    "Remote-Gen", "Remote-MRI", "Remote-Breast", "Remote-PET",
+    "Wash-MRI", "Wash-Breast", "Wash-Gen",
+    "Poway-PET", "Poway-MRI", "Poway-Gen",
+    "Enc-Breast", "Enc-MRI", "Enc-Gen",
+    "NC-Gen", "NC-PET", "NC-Breast", "NC-MRI",
+    "Wknd-MRI", "Wknd-PET",
+    "O'Toole",
+})
+
 # ---------------------------------------------------------------------------
-# Pool Config Templates
+# Pool Config Templates (task grouping)
+#
+# mercy_weekday_cfg: Mercy inpatient WEEKDAY (M0, M1, M2, M3) — non-IR only.
+#   Use _mercy_weekday_cfg() for block configs.
+# mercy_weekend_cfg: Mercy inpatient WEEKEND (M0_WEEKEND, EP, Dx-CALL) — non-IR only.
+#   Use _mercy_weekend_cfg() for block configs.
+# weekend_outpt_cfg: Weekend outpatient — Weekend MRI and Weekend PET (Wknd-MRI, Wknd-PET).
+#   Use _weekend_outpt_cfg() for block configs.
 # ---------------------------------------------------------------------------
-def _mercy_cfg(shift_names, weights, cursor_key="inpatient_weekday", n_per_day=1):
+def _mercy_weekday_cfg(shift_names, weights, cursor_key="inpatient_weekday", n_per_day=1):
+    """Mercy weekday rotation: M0, M1, M2, M3. Non-IR pool only."""
     return {
         "pool_filter":       "participates_mercy",
-        "exclude_ir":        True,          # HARD: IR staff never in mercy/weekend
+        "exclude_ir":        True,          # HARD: IR staff never in mercy weekday
         "shift_names":       shift_names,
         "shift_weights":     weights,
         "shifts_per_period": n_per_day,
@@ -244,7 +265,8 @@ def _mercy_cfg(shift_names, weights, cursor_key="inpatient_weekday", n_per_day=1
         "schedule_type":     "weekday",
     }
 
-def _weekend_cfg(shift_names, weights):
+def _mercy_weekend_cfg(shift_names, weights):
+    """Mercy weekend rotation: M0_WEEKEND, EP, Dx-CALL. Non-IR pool only."""
     return {
         "pool_filter":       "participates_weekend",
         "exclude_ir":        True,          # HARD: IR staff never in EP/LP/Dx-CALL
@@ -253,6 +275,22 @@ def _weekend_cfg(shift_names, weights):
         "shifts_per_period": len(shift_names),
         "cursor_key":        "inpatient_weekend",
         "avoid_previous":    True,
+        "allow_fallback":    True,
+        "use_weighted_cursor": True,
+        "target_cv":         0.10,
+        "schedule_type":     "weekend",
+    }
+
+def _weekend_outpt_cfg(shift_names, weights, cursor_key_base="weekend_outpt"):
+    """Weekend outpatient: Weekend MRI and Weekend PET. Single group, schedule_type=weekend."""
+    return {
+        "pool_filter":       "participates_gen",
+        "exclude_ir":        True,
+        "shift_names":       shift_names,
+        "shift_weights":     weights,
+        "shifts_per_period": len(shift_names),
+        "cursor_key":        cursor_key_base,
+        "avoid_previous":    False,
         "allow_fallback":    True,
         "use_weighted_cursor": True,
         "target_cv":         0.10,
@@ -314,30 +352,44 @@ def _outpt_cfg(shift_names, weights, cursor_key, subspecialty, schedule_type="we
 IR_WEEKDAY_CONFIG         = _ir_cfg(["IR-1","IR-2"], {"IR-1":1.00,"IR-2":1.00})
 IR_CALL_CONFIG            = _ir_cfg(["IR-CALL"],     {"IR-CALL":1.00}, "ir_call")
 
-M3_CONFIG  = _mercy_cfg(["M3"],     {"M3":1.00})
-M0_CONFIG  = _mercy_cfg(["M0"],     {"M0":0.25})
-M1M2_CONFIG= _mercy_cfg(["M1","M2"],{"M1":1.00,"M2":1.00}, n_per_day=2)
+# Mercy weekday (M0, M1, M2, M3) — explicit mercy_weekday_cfg
+M3_CONFIG   = _mercy_weekday_cfg(["M3"],     {"M3":1.00})
+M0_CONFIG   = _mercy_weekday_cfg(["M0"],     {"M0":0.25})
+M1M2_CONFIG = _mercy_weekday_cfg(["M1","M2"],{"M1":1.00,"M2":1.00}, n_per_day=2)
 
-WEEKEND_CONFIG = _weekend_cfg(
+# Mercy weekend (M0_WEEKEND, EP, Dx-CALL) — mercy_weekend_cfg
+WEEKEND_CONFIG = _mercy_weekend_cfg(
     ["M0_WEEKEND","EP","Dx-CALL"],
     {"M0_WEEKEND":0.25,"EP":0.81,"Dx-CALL":1.00}
 )
 
+# Weekend outpatient (Weekend MRI + Weekend PET) — weekend_outpt_cfg
+WEEKEND_OUTPT_CONFIG = _weekend_outpt_cfg(
+    ["Wknd-MRI", "Wknd-PET"],
+    {"Wknd-MRI": 1.00, "Wknd-PET": 1.00},
+    cursor_key_base="weekend_outpt",
+)
+
 # Gen — two separate cursors, one per pool
+# slots_per_week: cap weekdays per week (demand-based; aligns with real schedule coverage)
 GEN_NONIR_CONFIG = {**_gen_cfg("gen_nonir", exclude_ir=True),
-                    "description": "Remote Gen (non-IR staff)"}
+                    "description": "Remote Gen (non-IR staff)",
+                    "slots_per_week": 2}   # ~26/13 weeks in real schedule
 GEN_IR_CONFIG    = {**_gen_cfg("gen_ir",    exclude_ir=False),
                     "pool_filter": "participates_ir",
                     "description": "Remote Gen (IR staff)"}
 
-# Outpatient remote
-REMOTE_MRI_CONFIG    = _outpt_cfg(["Remote-MRI"],   {"Remote-MRI":1.00},   "remote_mri",   "mri")
-REMOTE_BREAST_CONFIG = _outpt_cfg(["Remote-Breast"],{"Remote-Breast":1.00},"remote_breast","mg",
-                                   exclude_ir=False)  # DA does Remote Breast
-REMOTE_PET_CONFIG    = _outpt_cfg(["Remote-PET"],   {"Remote-PET":1.00},   "remote_pet",   "pet")
+# Outpatient remote — demand-based slots per week from real schedule analysis
+REMOTE_MRI_CONFIG    = {**_outpt_cfg(["Remote-MRI"],   {"Remote-MRI":1.00},   "remote_mri",   "mri"),
+                        "slots_per_week": 3}   # ~34/13 weeks
+REMOTE_BREAST_CONFIG = {**_outpt_cfg(["Remote-Breast"],{"Remote-Breast":1.00},"remote_breast","mg",
+                                   exclude_ir=False),
+                        "slots_per_week": 3}   # ~32/13 weeks; DA eligible
+REMOTE_PET_CONFIG    = {**_outpt_cfg(["Remote-PET"],   {"Remote-PET":1.00},   "remote_pet",   "pet"),
+                        "slots_per_week": 2}   # ~15/13 weeks
 
-# Site-based — MRI
-WASH_MRI_CONFIG  = _outpt_cfg(["Wash-MRI"], {"Wash-MRI":1.00}, "site_mri", "mri")
+# Site-based — MRI (Wash-MRI requires MRI+Proc per roster; others require MRI)
+WASH_MRI_CONFIG  = _outpt_cfg(["Wash-MRI"], {"Wash-MRI":1.00}, "site_mri", "mri+proc")
 ENC_MRI_CONFIG   = _outpt_cfg(["Enc-MRI"],  {"Enc-MRI":1.00},  "site_mri", "mri")
 POWAY_MRI_CONFIG = _outpt_cfg(["Poway-MRI"],{"Poway-MRI":1.00},"site_mri", "mri")
 
@@ -355,9 +407,11 @@ POWAY_PET_CONFIG = _outpt_cfg(["Poway-PET"],{"Poway-PET":1.00},"site_pet","pet")
 # Site-based — Gen (IR staff eligible for all Gen sites)
 ENC_GEN_CONFIG   = _outpt_cfg(["Enc-Gen"], {"Enc-Gen":1.00}, "site_gen","gen", exclude_ir=False)
 POWAY_GEN_CONFIG = _outpt_cfg(["Poway-Gen"],{"Poway-Gen":1.00},"site_gen","gen",exclude_ir=False)
-NC_GEN_CONFIG    = _outpt_cfg(["NC-Gen"],  {"NC-Gen":1.00},  "site_gen","gen", exclude_ir=False)
+NC_GEN_CONFIG    = {**_outpt_cfg(["NC-Gen"],  {"NC-Gen":1.00},  "site_gen","gen", exclude_ir=False),
+                    "slots_per_week": 2}   # ~15/13 weeks in real schedule
 
-# O'Toole — MG-tagged staff (DA + non-IR MG)
+# O'Toole — MG-tagged staff (DA + non-IR MG). Tue/Wed/Fri only.
+OTOOLE_WEEKDAYS = {1, 2, 4}   # Tuesday=1, Wednesday=2, Friday=4 (Monday=0)
 OTOOLE_CONFIG = {
     "pool_filter":        "participates_mg",
     "exclude_ir":         False,             # DA is MG-qualified
@@ -371,6 +425,7 @@ OTOOLE_CONFIG = {
     "use_weighted_cursor": True,
     "target_cv":          0.10,
     "schedule_type":      "weekday",
+    "allowed_weekdays":   OTOOLE_WEEKDAYS,   # Tue, Wed, Fri only
     "description":        "Scripps O'Toole (Tue/Wed/Fri only)",
 }
 
@@ -414,12 +469,12 @@ SCHEDULING_BLOCKS: List[Dict[str, Any]] = [
      "can_skip": False, "exclude_ir": True,
      "interactive_prompt": "Schedule M1 and M2?"},
 
-    # ── 6. O'Toole (Tue/Wed/Fri) ────────────────────────────────────────────
+    # ── 6. O'Toole (Tue/Wed/Fri) — concurrent: can do with inpatient same day ─
     {"block_id": "otoole", "label": "O'Toole",
      "config": OTOOLE_CONFIG, "priority": 6,
      "can_skip": True, "exclude_ir": False,  # DA eligible
      "subspecialty_gate": "mg",
-     "concurrent_ok": True,
+     "concurrent_ok": True,   # outpatient: fill pool; one exclusive + outpatient allowed
      "interactive_prompt": "Schedule O'Toole?"},
      
     # ── 7. Site-based Breast ─────────────────────────────────────────────────
@@ -441,7 +496,7 @@ SCHEDULING_BLOCKS: List[Dict[str, Any]] = [
     {"block_id": "wash_mri", "label": "Washington MRI",
      "config": WASH_MRI_CONFIG, "priority": 9,
      "can_skip": True, "exclude_ir": True,
-     "subspecialty_gate": "mri",
+     "subspecialty_gate": "mri+proc",   # WASH-MRI requires MRI+Proc tag
      "concurrent_ok": True,
      "interactive_prompt": "Schedule Washington MRI?"},
 
@@ -492,7 +547,8 @@ SCHEDULING_BLOCKS: List[Dict[str, Any]] = [
     # ── 11. Gen (non-IR staff) ────────────────────────────────────────────────
     {"block_id": "gen_nonir", "label": "Remote Gen (non-IR)",
      "config": GEN_NONIR_CONFIG, "priority": 16,
-     "can_skip": True, "exclude_ir": True, "concurrent_ok": True,
+     "can_skip": True, "exclude_ir": True,
+     "concurrent_ok": True,
      "interactive_prompt": "Schedule Gen diagnostic (non-IR staff)?"},
 
     # ── 12. Gen (IR staff) ─────────────────────────────────────────────────────
@@ -524,14 +580,14 @@ SCHEDULING_BLOCKS: List[Dict[str, Any]] = [
      "concurrent_ok": True,
      "interactive_prompt": "Schedule Remote PET?"},
 
-    # ── 14. Weekend inpatient — NON-IR ONLY ───────────────────────────────────
+    # ── 14. Weekend inpatient — exclusive (one per person per weekend day) ───────
     {"block_id": "inpatient_weekend", "label": "Weekend Inpatient (M0/EP/Dx-CALL)",
      "config": WEEKEND_CONFIG, "priority": 21,
      "can_skip": True, "exclude_ir": True,
-     "concurrent_ok": True,
+     "concurrent_ok": False,
      "interactive_prompt": "Schedule weekend inpatient block?"},
 
-    # ── 15. Weekend outpatient ────────────────────────────────────────────────
+    # ── 15. Weekend outpatient — concurrent with weekend inpatient ────────────
     {"block_id": "wknd_mri", "label": "Weekend MRI",
      "config": WKND_MRI_CONFIG, "priority": 22,
      "can_skip": True, "exclude_ir": True,
@@ -558,18 +614,25 @@ ALL_CURSOR_KEYS = sorted({
 # Fairness / constraint config
 # ---------------------------------------------------------------------------
 CONSTRAINT_WEIGHTS: Dict[str, Any] = {
-    "back_to_back_weekend":  {"severity": "soft",  "penalty": 100},
-    "vacation_assignment":   {"severity": "hard",  "penalty": 9999},
-    "double_booking":        {"severity": "hard",  "penalty": 9999},
-    "subspecialty_mismatch": {"severity": "hard",  "penalty": 9999},
-    "ir_pool_gate":          {"severity": "hard",  "penalty": 9999},
-    "mercy_pool_gate":       {"severity": "hard",  "penalty": 9999},
-    "weekend_pool_gate":     {"severity": "hard",  "penalty": 9999},
-    "workload_cv_exceeded":  {"severity": "soft",  "penalty": 25},
+    "back_to_back_weekend":       {"severity": "soft",  "penalty": 100},
+    "vacation_assignment":        {"severity": "hard",  "penalty": 9999},
+    "double_booking":             {"severity": "hard",  "penalty": 9999},
+    "duplicate_task_assignment":  {"severity": "hard",  "penalty": 9999},
+    "ir_and_gen_same_day":        {"severity": "hard",  "penalty": 9999},
+    "ir_weekday_exclusive":       {"severity": "hard",  "penalty": 9999},
+    "multiple_outpatient_same_day": {"severity": "hard", "penalty": 9999},
+    "two_weekday_tasks":          {"severity": "hard",  "penalty": 9999},
+    "subspecialty_mismatch":      {"severity": "hard",  "penalty": 9999},
+    "ir_pool_gate":               {"severity": "hard",  "penalty": 9999},
+    "mercy_pool_gate":            {"severity": "hard",  "penalty": 9999},
+    "weekend_pool_gate":          {"severity": "hard",  "penalty": 9999},
+    "workload_cv_exceeded":       {"severity": "soft",  "penalty": 25},
 }
 
+# CV 10% is a SOFT constraint (logged, does not block scheduling) to ease scheduling
+# while aiming for fairness. See constraints.check_cv_target.
 FAIRNESS_TARGETS: Dict[str, Any] = {
-    "cv_target":            0.10,
+    "cv_target":            0.10,   # soft: warn if exceeded, do not block
     "max_deviation":        0.20,
     "weighted_hours":       True,
 }
@@ -582,5 +645,4 @@ FIXED_SUBSPECIALTY_ASSIGNMENTS: Dict[str, List[str]] = {
     "Cardiac":    ["John Johnson", "Brian Trinh"],
 }
 
-# O'Toole runs Tue/Wed/Fri only
-OTOOLE_WEEKDAYS = {1, 2, 4}   # Mon=0 … Fri=4
+# O'Toole allowed weekdays (Tue/Wed/Fri) — also on OTOOLE_CONFIG

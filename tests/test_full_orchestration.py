@@ -124,7 +124,7 @@ class TestRosterValidation:
 
     def test_non_ir_not_in_ir_pool(self, roster, ir_pool):
         ir_initials = {p["initials"] for p in ir_pool}
-        expected_non_ir = {"BT", "EC", "EK", "EL", "GA", "JC", "JJ", "JV",
+        expected_non_ir = {"BT", "EC", "EK", "EL", "GA", "JC", "JJ", "JCV",
                            "KY", "KR", "MS", "MB", "MG", "RT", "YR"}
         overlap = expected_non_ir & ir_initials
         assert not overlap, f"Non-IR staff found in IR pool: {overlap}"

@@ -27,7 +27,7 @@ They correct the earlier run that had **no IR (Interventional Radiology) personn
 
 ## Usage
 
-- **Scheduling engine** (`src/config.py`): Use `roster_key.csv` as the main roster. Populate it from `sample_roster_key_diagnostic.csv` and set `participates_ir` (and optionally FTE, email, exempt_dates) as needed.
+- **Scheduling engine** (`src/config.py`): Use `roster_key.csv` as the main roster (no separate `roster.csv`). Populate it from `sample_roster_key_diagnostic.csv` and set `participates_ir` (and optionally FTE, email, exempt_dates) as needed. For **Wash-MRI** (Washington MRI) the roster must include the **MRI+Proc** subspecialty tag for eligible staff; the engine staffs that task only from the MRI+Proc pool.
 - **Analyzer** (`scripts/analyze_schedule.py`): Use the new Excel as the schedule source. Optionally restrict to a pool:
   - `--roster config/sample_roster_key_diagnostic.csv` — fairness over full group
   - `--roster config/sample_roster_key_interventional.csv` — fairness over IR pool only

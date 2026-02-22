@@ -66,7 +66,7 @@ id,index,initials,name,email,role,exempt_dates,fte,participates_mercy,participat
 7,6,EC,Eric Chou,eric.c@hospital.org,Radiologist,"",1.0,yes,yes
 8,7,GA,Gregory Anderson,greg@hospital.org,Radiologist,"",1.0,yes,yes
 9,8,EL,Eric Lizerbram,eric.l@hospital.org,Radiologist,"",1.0,yes,yes
-10,9,JV,JuanCarlos Vera,juan@hospital.org,Radiologist,"",1.0,yes,yes
+10,9,JCV,JuanCarlos Vera,juan@hospital.org,Radiologist,"",1.0,yes,yes
 11,10,MB,Michael Booker,michael.b@hospital.org,Radiologist,"",1.0,yes,yes
 12,11,BT,Brian Trinh,brian@hospital.org,Radiologist,"",0.8,no,no
 13,12,YR,Yonatan Rotman,yonatan@hospital.org,Radiologist,"",1.0,yes,yes

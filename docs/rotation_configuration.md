@@ -516,7 +516,7 @@ id,index,initials,name,email,role,exempt_dates,fte,participates_inp_weekday,part
 6,5,GA,Gregory Anderson,greg@hospital.org,Radiologist,"",1.0,yes,yes,yes
 7,6,EL,Eric Lizerbram,eric.l@hospital.org,Radiologist,"",1.0,yes,yes,yes
 8,7,KY,Karen Yuan,karen@hospital.org,Radiologist,"",0.8,yes,yes,yes
-9,8,JV,JuanCarlos Vera,juan@hospital.org,Radiologist,"",1.0,yes,yes,yes
+9,8,JCV,JuanCarlos Vera,juan@hospital.org,Radiologist,"",1.0,yes,yes,yes
 10,9,MB,Michael Booker,michael.b@hospital.org,Radiologist,"",1.0,yes,yes,yes
 11,10,KR,Kriti Rishi,kriti@hospital.org,Radiologist,"",0.8,yes,yes,yes
 12,11,JC,James Cooper,james@hospital.org,Radiologist,"",0.5,yes,yes,yes

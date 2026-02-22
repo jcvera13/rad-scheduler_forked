@@ -5,6 +5,56 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [3.1.0] — 2026-02-21
+
+### Summary
+Refinement of task grouping, constraint enforcement, fairness reporting, and vacation workflow. O'Toole restricted to Tue/Wed/Fri; Wash-MRI requires MRI+Proc tag; dry run gains hours-assigned CV, visual charts, and fairness JSON. New script builds `vacation_map.csv` from QGenda .xlsx in `inputs/`.
+
+---
+
+### Added
+
+#### Task grouping (`schedule_config.py`)
+- **mercy_weekday_cfg** — Mercy inpatient weekday (M0, M1, M2, M3); non-IR only. Implemented via `_mercy_weekday_cfg()`.
+- **mercy_weekend_cfg** — Mercy inpatient weekend (M0_WEEKEND, EP, Dx-CALL); non-IR only. Implemented via `_mercy_weekend_cfg()`.
+- **weekend_outpt_cfg** — Weekend outpatient (Wknd-MRI, Wknd-PET). Implemented via `_weekend_outpt_cfg()`.
+- Backwards-compat aliases `_mercy_cfg` and `_weekend_cfg` removed; block configs use explicit names.
+
+#### MRI+Proc subspecialty
+- **Wash-MRI** (Washington MRI) staffed only by radiologists with **MRI+Proc** tag in roster. `SHIFT_DEFINITIONS["Wash-MRI"]["requires"]` and block `subspecialty_gate: "mri+proc"` enforce this. See `config/README_sample_rosters.md` and `roster_key.csv`.
+
+#### Fairness and dry run
+- **Hours-assigned** component in fairness: `calculate_fairness_metrics()` returns `hours_counts`, `hours_mean`, `hours_std`, `hours_cv`. Fairness report and dry_run summary include hours-assigned CV (target &lt;10%).
+- **Fairness JSON** — Dry run writes `{prefix}_fairness_data.json` with `weighted_cv`, `hours_cv`, `hours_mean`, `hours_std`, `hours_counts`, `unfilled` for programmatic balance checks.
+- **CLI `--visual`** — `python -m src.dry_run ... --visual` generates matplotlib charts (shift distribution, hours distribution, deviation, task breakdown). Reference: `scripts/analyze_schedule.py`.
+
+#### Vacation map from QGenda export
+- **`scripts/extract_vacation_map.py`** — Parses .xlsx in `inputs/` (QGenda List by Assignment Tag or List by Staff Export), extracts exempt days (vacation, off all day, admin, No call, no ep, etc.), and writes `config/vacation_map.csv` in the format expected by `load_vacation_map()`. Enables scheduling orchestration to use current QGenda data for unavailability.
+
+#### Constraint and engine behavior
+- **One assignment per (date, shift)** — Merge step in `schedule_blocks()` ensures at most one staff per (date, shift); duplicate assignments are skipped with a warning so exports never show two radiologists on the same task.
+- **No two weekday tasks per person** — Anyone assigned an exclusive weekday shift (M0, M1, M2, M3, IR-1, IR-2) is excluded from all other blocks that day (no M1 + O'Toole same day). IR+Gen same day remains hard-disallowed.
+
+---
+
+### Fixed
+
+#### O'Toole weekday filter
+- **O'Toole** is now scheduled **only on Tuesday, Wednesday, Friday** (weekdays 1, 2, 4). `OTOOLE_WEEKDAYS` and `allowed_weekdays` in block config are applied in `schedule_blocks()` when building block dates. Removed from “Planned” in operations/pool_rules.
+
+#### Double-assignment in export
+- Engine merge logic prevents a second assignment for the same (date, shift), eliminating the case where the exported schedule showed two radiologists on the same task.
+
+---
+
+### Changed
+
+- `docs/operations.md` — Vacation map format corrected to `date,unavailable_staff`; added extract_vacation_map, --visual, fairness JSON; O'Toole marked implemented.
+- `docs/pool_rules.md` — MRI+Proc for Wash-MRI; O'Toole Tue/Wed/Fri marked live.
+- `docs/architecture.md` — Task grouping, new hard constraints, hours in metrics, inputs/extract_vacation_map, O'Toole filter.
+
+---
+
 ## [3.0.0] — 2026-02-21
 
 ### Summary
