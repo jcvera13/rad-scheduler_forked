@@ -1,0 +1,123 @@
+{
+  "date_range": {
+    "start": "2026-01-01",
+    "end": "2026-04-01"
+  },
+  "shift_metrics": {
+    "mean": 65.6842105263158,
+    "std": 22.233338247773077,
+    "cv": 33.848832268244266,
+    "min": 26.0,
+    "max": 111.0,
+    "range": 85.0
+  },
+  "hour_metrics": {
+    "mean": 0.0,
+    "std": 0.0,
+    "cv": 0.0,
+    "min": 0.0,
+    "max": 0.0,
+    "range": 0.0
+  },
+  "per_person": {
+    "Eric Kim": {
+      "shifts": 111,
+      "hours": 0.0
+    },
+    "James Cooper": {
+      "shifts": 103,
+      "hours": 0.0
+    },
+    "Michael Booker": {
+      "shifts": 98,
+      "hours": 0.0
+    },
+    "Kriti Rishi": {
+      "shifts": 72,
+      "hours": 0.0
+    },
+    "Brian Trinh": {
+      "shifts": 70,
+      "hours": 0.0
+    },
+    "Eric Lizerbram": {
+      "shifts": 69,
+      "hours": 0.0
+    },
+    "John Johnson": {
+      "shifts": 69,
+      "hours": 0.0
+    },
+    "Mark Schechter": {
+      "shifts": 68,
+      "hours": 0.0
+    },
+    "Rowena Tena": {
+      "shifts": 67,
+      "hours": 0.0
+    },
+    "Gregory Anderson": {
+      "shifts": 66,
+      "hours": 0.0
+    },
+    "Eric Chou": {
+      "shifts": 66,
+      "hours": 0.0
+    },
+    "Karen Yuan": {
+      "shifts": 65,
+      "hours": 0.0
+    },
+    "Michael Grant": {
+      "shifts": 64,
+      "hours": 0.0
+    },
+    "Yonatan Rotman": {
+      "shifts": 62,
+      "hours": 0.0
+    },
+    "JuanCarlos Vera": {
+      "shifts": 62,
+      "hours": 0.0
+    },
+    "Derrick Allen": {
+      "shifts": 58,
+      "hours": 0.0
+    },
+    "Sharjeel Sabir": {
+      "shifts": 26,
+      "hours": 0.0
+    },
+    "Sina Fartash": {
+      "shifts": 26,
+      "hours": 0.0
+    },
+    "Ted Rothenberg": {
+      "shifts": 26,
+      "hours": 0.0
+    }
+  },
+  "task_counts": {
+    "M0": 65,
+    "O'Toole": 65,
+    "Wash-Breast": 65,
+    "Remote-PET": 65,
+    "Remote-MRI": 65,
+    "Remote-Gen": 65,
+    "Remote-Breast": 65,
+    "Poway-PET": 65,
+    "Poway-MRI": 65,
+    "Poway-Gen": 65,
+    "NC-Gen": 65,
+    "M1": 65,
+    "Enc-MRI": 65,
+    "Enc-Gen": 65,
+    "Enc-Breast": 65,
+    "M3": 65,
+    "M2": 65,
+    "Wash-MRI": 65,
+    "Dx-CALL": 26,
+    "EP": 26,
+    "M0_WEEKEND": 26
+  }
+}
