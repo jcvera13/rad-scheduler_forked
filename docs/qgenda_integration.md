@@ -26,7 +26,7 @@ Washingon,MG1*,MR1*,MR1*,MR1*,MG1*,-,-
 Encinitas,MR1,MG1*,MG1*,GEN1,GEN1,-,-
 Poway,GEN1,GEN1,MR2,PET1,PET1,-,-
 Remote,MG2,MG2,MG2,MG1,MG2,MR1,MR1
-Remote,MR2,MR 2,MR3,MG2,MR1,PET1,PET1
+Remote,MR2,MR2,MR3,MG2,MR1,PET1,PET1
 Remote,MR3,PET1,PET1,MR2,MR2,-,-
 Remote,PET1,GEN2,GEN1,GEN2,MR3,-,-
 Remote,GEN2,GEN3,-,-,GEN2,-,-
@@ -79,29 +79,35 @@ _1._ _Mercy_
 
 
 ### List of Radiologists and their Core Specialties
+Radiologist|MG|MRI|PET|Gen|Mercy|IR|
 
-|Radiologists|Core Specialties|Col3|Col4|Col5|Col6|Col7|
-|---|---|---|---|---|---|---|
-||MG|MRI|PET|Gen|Mercy|IR|
-|Derrick Allen (DA)|x|||x||x|
-|Michael Booker (MTB)||x|x|x|x||
+
+|Michael Booker (MTB)  | |x|x|x|x||
+|Juan Carlos Vera (JCV)| |x|x|x|x||
+|Eric Kim (EK)         |x| |x|x|x||
+|James Cooper (JC)     |x|x| |x|x||
+|Mark Schechter (MS)   |x| |x|x|x||
+
 |Gregory Anderson (GA)||x||x|x||
-|Eric Chou (EC)||x||x|x||
-|James Cooper (JC)|x|x||x|x||
-|Sina Fahrtash (SF)||||x||x|
-|Michael Grant (MG)|||x|x|x||
-|John Johnson (JJ)|x|||x|x||
-|Eric Kim (EK)|x||x|x|x||
-|Eric Lizerbram (EL)||x||x|x||
+|Eric Chou (EC)       ||x||x|x||
+|Eric Lizerbram (EL)  ||x||x|x||
+|Brian Trinh (BT)     ||x||x|x||
+|Karen Yuan (KY)      ||x||x|x||
+
+|Derrick Allen (DA) |x| | |x| |x|
+|Rowena Tena (RT)   |x| | |x|x| |
+|Kriti Rishi (KR)   |x| | |x|x| |
+|John Johnson (JJ)  |x| | |x|x| |
+|Michael Grant (MG) | | |x|x|x| |
+|Yonatan Rotman (YR)| | |x|x|x| |
+
 |Ted Rothenberg (TR)||||x||x|
-|Kriti Rishi (KR)|x|||x|x||
-|Yonatan Rotman (YR)|||x|x|x||
+|Sina Fahrtash (SF) ||||x||x|
 |Sharjeel Sabir (SS)||||x||x|
-|Mark Schechter (MS)|||x|x|x||
-|Rowena Tena (RT)|x|||x|x||
-|Brian Trinh (BT)||x||x|x||
-|Juna Carlos Vera (JCV)||x|x|x|x||
-|Karen Yuan (KY)||x||x|x||
+
+
+
+
 
 
 ## List of Locations

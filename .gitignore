@@ -164,7 +164,7 @@ backup_*/
 *.BAK*
 *.BAK2
 *.BAK3
-
+*.bak
 # Other
 DEPLOYMENT_CHECKLIST.md
 DEPLOYMENT_SUMMARY.md

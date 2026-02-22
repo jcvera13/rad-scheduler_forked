@@ -1,7 +1,7 @@
 # Radiology Scheduler — Architecture Reference
 
 **Version:** 3.2.0  
-**Last Updated:** 2026-02-21
+**Last Updated:** 2026-02-22
 
 ---
 

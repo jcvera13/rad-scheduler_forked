@@ -1,20 +1,20 @@
 id,index,initials,name,email,role,exempt_dates,fte,participates_mercy,participates_ir,participates_weekend,participates_gen,participates_outpatient,participates_mg,participates_MRI,participates_PET,subspecialties,notes
-1,0,BT,Brian Trinh,,Radiologist,,1.0,yes,no,yes,yes,yes,no,yes,no,"neuro,cardiac,nm,MRI,Gen,MRI+Proc","Skull Base/Cardiac subspecialist"
-2,1,DA,Derrick Allen,,Radiologist,,1.0,no,yes,no,yes,yes,yes,no,yes,"ir,MG,gen,Breast-Proc","IR + MG/OToole + Gen; outpatient-eligible"
-3,2,EC,Eric Chou,,Radiologist,,1.0,yes,no,yes,yes,yes,no,yes,no,"MRI,Gen,North_Gen+Cont",
-4,3,EK,Eric Kim,,Radiologist,,1.0,yes,no,yes,yes,yes,yes,no,yes,"PET,MG,Gen",
+1,0,BT,Brian Trinh,,Radiologist,,1.0,yes,no,yes,yes,yes,no,yes,no,"neuro,cardiac,nm,MRI,MRI+Proc,North_Gen+Cont","Skull Base/Cardiac subspecialist"
+2,1,DA,Derrick Allen,,Radiologist,,1.0,no,yes,no,yes,yes,yes,no,yes,"ir,MG,Breast-Proc,South_Gen+Cont","IR + MG/OToole + Gen; outpatient-eligible"
+3,2,EC,Eric Chou,,Radiologist,,1.0,yes,no,yes,yes,yes,no,yes,no,"MRI,North_Gen+Cont",
+4,3,EK,Eric Kim,,Radiologist,,1.0,yes,no,yes,yes,yes,yes,no,yes,"PET,MG,Breast-Proc,North_Gen+Cont",
 5,4,EL,Eric Lizerbram,,Radiologist,,1.0,yes,no,yes,yes,yes,no,yes,no,"MRI,Gen,MRI+Proc,North_Gen+Cont",
-6,5,GA,Gregory Anderson,,Radiologist,,1.0,yes,no,yes,yes,yes,no,yes,no,"MRI,Gen,MRI+Proc,North_Gen+Cont",
-7,6,JC,James Cooper,,Radiologist,,1.0,yes,no,yes,yes,yes,yes,yes,no,"MG,MRI,Gen,neuro,MRI+Proc,Breast-Proc","Skull Base subspecialist"
-8,7,JJ,John Johnson,,Radiologist,,1.0,yes,no,yes,yes,yes,yes,no,no,"MG,Gen,cardiac,South_Gen+Cont","Cardiac primary"
+6,5,GA,Gregory Anderson,,Radiologist,,1.0,yes,no,yes,yes,yes,no,yes,no,"MRI,MRI+Proc,North_Gen+Cont",
+7,6,JC,James Cooper,,Radiologist,,1.0,yes,no,yes,yes,yes,yes,yes,no,"MG,MRI,neuro,MRI+Proc,Breast-Proc","Skull Base subspecialist"
+8,7,JJ,John Johnson,,Radiologist,,1.0,yes,no,yes,yes,yes,yes,no,no,"MG,Gen,cardiac,South_Gen+Cont,South_Gen+Cont","Cardiac primary"
 9,8,JCV,JuanCarlos Vera,,Radiologist,,1.0,yes,no,yes,yes,yes,no,yes,no,"neuro,nm,MRI,Gen,MRI+Proc,South_Gen+Cont","Skull Base subspecialist"
-10,9,KY,Karen Yuan,,Radiologist,,1.0,yes,no,yes,yes,yes,no,yes,no,"MRI,Gen,MRI+Proc,Breast-Proc",
-11,10,KR,Kriti Rishi,,Radiologist,,1.0,yes,no,yes,yes,yes,yes,no,no,"MG,Gen",
-12,11,MS,Mark Schechter,,Radiologist,,1.0,yes,no,yes,yes,yes,yes,no,no,"nm,Gen,MG",
-13,12,MB,Michael Booker,,Radiologist,,1.0,yes,no,yes,yes,yes,no,yes,yes,"MRI,MRI+Proc,PET,Gen,Proc",
-14,13,MG,Michael Grant,,Radiologist,,1.0,yes,no,yes,yes,yes,no,no,yes,"PET,Gen",
-15,14,RT,Rowena Tena,,Radiologist,,1.0,yes,no,yes,yes,yes,yes,no,no,"MG,Gen,Breast-Proc",
-16,15,SS,Sharjeel Sabir,,Radiologist,,1.0,no,yes,no,yes,no,no,no,no,"ir,Gen","IR only; no outpatient/mercy/weekend"
-17,16,SF,Sina Fartash,,Radiologist,,1.0,no,yes,no,yes,no,no,no,no,"ir,Gen","IR only; no outpatient/mercy/weekend"
-18,17,TR,Ted Rothenberg,,Radiologist,,1.0,no,yes,no,yes,no,no,no,no,"ir,Gen","IR only; no outpatient/mercy/weekend"
-19,18,YR,Yonatan Rotman,,Radiologist,,1.0,yes,no,yes,yes,yes,no,no,yes,"PET,Gen",
+10,9,KY,Karen Yuan,,Radiologist,,1.0,yes,no,yes,yes,yes,no,yes,no,"MRI,Gen,MRI+Proc,North_Gen+Cont,South_Gen+Cont",
+11,10,KR,Kriti Rishi,,Radiologist,,1.0,yes,no,yes,yes,yes,yes,no,no,"MG,Breast-Proc,North_Gen+Cont,South_Gen+Cont",
+12,11,MS,Mark Schechter,,Radiologist,,1.0,yes,no,yes,yes,yes,yes,no,no,"nm,MG,Breast-Proc,North_Gen+Cont,South_Gen+Cont",
+13,12,MB,Michael Booker,,Radiologist,,1.0,yes,no,yes,yes,yes,no,yes,yes,"MRI,MRI+Proc,PET,North_Gen+Cont",
+14,13,MG,Michael Grant,,Radiologist,,1.0,yes,no,yes,yes,yes,no,no,yes,"PET,North_Gen+Cont,South_Gen+Cont",
+15,14,RT,Rowena Tena,,Radiologist,,1.0,yes,no,yes,yes,yes,yes,no,no,"MG,Breast-Proc",
+16,15,SS,Sharjeel Sabir,,Radiologist,,1.0,no,yes,no,yes,no,no,no,no,"ir,North_Gen+Cont","IR only; no outpatient/mercy/weekend"
+17,16,SF,Sina Fartash,,Radiologist,,1.0,no,yes,no,yes,no,no,no,no,"ir,North_Gen+Cont,South_Gen+Cont","IR only; no outpatient/mercy/weekend"
+18,17,TR,Ted Rothenberg,,Radiologist,,1.0,no,yes,no,yes,no,no,no,no,"ir,South_Gen+Cont","IR only; no outpatient/mercy/weekend"
+19,18,YR,Yonatan Rotman,,Radiologist,,1.0,yes,no,yes,yes,yes,no,no,yes,"PET,Gen,North_Gen+Cont,South_Gen+Cont",

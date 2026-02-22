@@ -1,29 +1,91 @@
 """
-Fair Radiology Scheduling Engine
+engine.py — Fair Radiology Scheduling Engine
 
-Implements the infinite modulo stream / cursor-based fairness algorithm
-from docs/architecture.md with:
-- Vacation-aware scheduling (skipped staff retain rotation position)
-- Back-to-back weekend avoidance (strict + fallback modes)
-- FTE-weighted assignment frequency
-- Weighted cursor advancement (M0=0.25×, M1=1.0×, M2=1.0×, M3=0.75×)
+Core algorithm: infinite modulo stream / cursor-based fairness.
+Supports:
+  - Weighted cursor (M0=0.25×, M1=1.0×, M3=0.75×, etc.)
+  - Block scheduling (schedule IR first, M3 second, Off marks, etc.)
+  - Interactive mode: step through blocks with user confirmation
+  - FTE-weighted assignment frequency
+  - Vacation-aware (skipped staff retain position in stream)
+  - Back-to-back weekend avoidance (strict + fallback)
 
-See docs/architecture.md, docs/analysis/comprehensive_analysis.md
+Algorithm:
+  People = [A, B, C, D, ...] ordered by index.
+  Cursor = float (weighted).
+  For each slot:
+    pos = floor(cursor) % N
+    Advance to next non-vacation, non-already-assigned person.
+    cursor += shift_weight
+
+See docs/architecture.md, src/schedule_config.py
 """
 
 import logging
-from datetime import date
+import math
+from datetime import date, timedelta
 from typing import Any, Dict, List, Optional, Tuple, Union
-
-from .config import (
-    DEFAULT_SHIFT_DEFINITIONS,
-    get_shift_weight,
-    load_roster,
-    load_vacation_map,
-)
 
 logger = logging.getLogger(__name__)
 
+# Type alias
+Schedule = Dict[str, List[Tuple[str, str]]]   # date_str → [(shift, name)]
+
+
+# ---------------------------------------------------------------------------
+# Core: single slot assignment
+# ---------------------------------------------------------------------------
+
+def _pick_next(
+    people: List[Dict[str, Any]],
+    cursor: float,
+    already_assigned_today: set,
+    unavailable: set,
+    previous_period: Optional[set] = None,
+    allow_fallback: bool = True,
+) -> Tuple[Optional[Dict[str, Any]], float]:
+    """
+    Pick the next eligible person from the stream starting at cursor.
+
+    Returns (person_dict, cursor_advanced_to) or (None, cursor) if no one available.
+    Tries strict mode (avoids previous_period) then falls back if allow_fallback.
+    """
+    N = len(people)
+    if N == 0:
+        return None, cursor
+
+    def _scan(avoid_prev: bool) -> Optional[Tuple[Dict, float]]:
+        start_pos = int(math.floor(cursor)) % N
+        for offset in range(N):
+            pos = (start_pos + offset) % N
+            person = people[pos]
+            name = person["name"]
+            if name in already_assigned_today:
+                continue
+            if name in unavailable:
+                continue
+            if avoid_prev and previous_period and name in previous_period:
+                continue
+            # Found eligible
+            new_cursor = cursor + offset  # cursor advances to this person
+            return person, new_cursor
+        return None
+
+    result = _scan(avoid_prev=bool(previous_period))
+    if result is None and allow_fallback and previous_period:
+        logger.debug("Back-to-back fallback triggered")
+        result = _scan(avoid_prev=False)
+
+    if result is None:
+        logger.warning(f"No eligible person found at cursor={cursor}, unavailable={unavailable}")
+        return None, cursor
+
+    return result[0], result[1]
+
+
+# ---------------------------------------------------------------------------
+# Core: schedule_period (single rotation pool, single block)
+# ---------------------------------------------------------------------------
 
 def schedule_period(
     people: List[Dict[str, Any]],
@@ -36,116 +98,113 @@ def schedule_period(
     avoid_previous: bool = False,
     allow_fallback: bool = True,
     use_weighted_cursor: bool = True,
-) -> Tuple[Dict[str, List[Tuple[str, str]]], float]:
+    fte_weight: bool = False,
+) -> Tuple[Schedule, float]:
     """
-    Schedule shifts using infinite modulo stream with optional weighted cursor.
+    Schedule shifts for a list of dates using the infinite modulo stream.
 
     Args:
-        people: List of radiologist dicts (must have 'name', 'index'; order defines rotation)
-        dates: List of dates to schedule (for weekend, use Saturday date per period)
-        shifts_per_period: Number of shifts per date/period
-        shift_names: Optional list like ['M0','M1','M2','M3'] for weighted fairness
-        shift_weights: Optional {shift_name: weight}; defaults from config
-        cursor: Starting stream position (int for simple, float for weighted)
-        vacation_map: Dict[date_str, List[unavailable_names]]
-        avoid_previous: If True, avoid same people as previous period (back-to-back weekend)
-        allow_fallback: If True, relax avoid_previous when insufficient staff
-        use_weighted_cursor: If True, advance cursor by shift weight (M0=0.25, etc.)
+        people:              Roster list, each dict has 'name', 'index', optional 'fte'.
+                             ORDER defines rotation sequence.
+        dates:               Dates to schedule (for weekends, use Saturday date).
+        shifts_per_period:   Number of slots per date/period.
+        shift_names:         Names for each slot, e.g. ['M0','M1','M2','M3'].
+                             Defaults to ['S0','S1',...].
+        shift_weights:       Weight per shift name (cursor advance). Default 1.0.
+        cursor:              Starting float cursor position in stream.
+        vacation_map:        {date_str: [unavailable_names]}.
+        avoid_previous:      If True, avoid last period's assigned names (back-to-back).
+        allow_fallback:      If True, relax avoid_previous when pool too small.
+        use_weighted_cursor: If True, advance cursor by shift weight; else by 1.0.
+        fte_weight:          Reserved: FTE-proportional scheduling (future).
 
     Returns:
-        Tuple of:
-          - schedule: Dict[date_str, List[(shift_name, person_name)]]
-          - final_cursor: float (or int if not weighted)
+        (schedule, final_cursor)
+        schedule: {date_str: [(shift_name, person_name), ...]}
     """
     if vacation_map is None:
         vacation_map = {}
+    if shift_weights is None:
+        shift_weights = {}
 
     N = len(people)
-    name_list = [p["name"] for p in people]
     if N == 0:
-        raise ValueError("People list cannot be empty")
+        raise ValueError("people list is empty — check pool filter")
 
-    # Build shift weights
+    # Sort by roster index to ensure consistent rotation order regardless of
+    # how the pool was filtered. Cursor math uses array position (0..N-1).
+    people = sorted(people, key=lambda p: p["index"])
+
+    # Build shift name list
     if shift_names is None:
-        shift_names = [f"Shift_{i}" for i in range(shifts_per_period)]
-    weights = shift_weights or {}
-    for name in shift_names:
-        if name not in weights:
-            weights[name] = get_shift_weight(name) if use_weighted_cursor else 1.0
+        shift_names = [f"S{i}" for i in range(shifts_per_period)]
+    if len(shift_names) < shifts_per_period:
+        shift_names = (shift_names * math.ceil(shifts_per_period / len(shift_names)))[:shifts_per_period]
 
-    schedule: Dict[str, List[Tuple[str, str]]] = {}
-    stream_pos = float(cursor)
-    last_assigned: set = set()
+    schedule: Schedule = {}
+    float_cursor = float(cursor)
+    previous_names: Optional[set] = None
 
-    for d in dates:
-        key = d.strftime("%Y-%m-%d")
-        unavailable = set(vacation_map.get(key, []))
-        if avoid_previous and last_assigned:
-            unavailable |= last_assigned
+    for day in dates:
+        date_str = day.isoformat()
+        unavailable = set(vacation_map.get(date_str, []))
+        assigned_today: set = set()
+        day_assignments: List[Tuple[str, str]] = []
 
-        assigned: List[Tuple[str, str]] = []
-        shift_idx = 0
+        for slot_idx in range(shifts_per_period):
+            shift = shift_names[slot_idx % len(shift_names)]
+            weight = shift_weights.get(shift, 1.0) if use_weighted_cursor else 1.0
 
-        while len(assigned) < shifts_per_period:
-            shift_name = shift_names[shift_idx % len(shift_names)]
-            weight = weights.get(shift_name, 1.0)
+            person, new_cursor = _pick_next(
+                people=people,
+                cursor=float_cursor,
+                already_assigned_today=assigned_today,
+                unavailable=unavailable,
+                previous_period=previous_names if avoid_previous else None,
+                allow_fallback=allow_fallback,
+            )
 
-            probe = int(stream_pos)
-            tries = 0
-            chosen = None
-            max_tries = N * 2
+            if person is None:
+                logger.error(f"Could not fill {shift} on {date_str}")
+                day_assignments.append((shift, "UNFILLED"))
+                float_cursor += weight
+                continue
 
-            while tries < max_tries:
-                candidate = name_list[probe % N]
-                if candidate not in unavailable and candidate not in [a[1] for a in assigned]:
-                    chosen = candidate
-                    break
-                probe += 1
-                tries += 1
+            # Advance cursor past this person + weight
+            advance = (new_cursor - float_cursor) + weight
+            float_cursor += advance
 
-            if chosen is None and allow_fallback and avoid_previous and last_assigned:
-                # Retry without back-to-back restriction
-                logger.warning(f"Insufficient staff for {key} shift {shift_name}, relaxing back-to-back")
-                unavailable -= last_assigned
-                probe = int(stream_pos)
-                tries = 0
-                while tries < max_tries:
-                    candidate = name_list[probe % N]
-                    if candidate not in unavailable and candidate not in [a[1] for a in assigned]:
-                        chosen = candidate
-                        break
-                    probe += 1
-                    tries += 1
+            assigned_today.add(person["name"])
+            day_assignments.append((shift, person["name"]))
+            logger.debug(f"{date_str} {shift} → {person['name']} (cursor={float_cursor:.2f})")
 
-            if chosen is None:
-                raise RuntimeError(
-                    f"Insufficient staff for {key} shift {shift_name}. "
-                    f"Unavailable: {unavailable}, Assigned: {assigned}"
-                )
+        schedule[date_str] = day_assignments
+        previous_names = assigned_today  # for next period back-to-back check
 
-            assigned.append((shift_name, chosen))
-            stream_pos += weight
-            shift_idx += 1
+    return schedule, float_cursor
 
-        last_assigned = {a[1] for a in assigned}
-        schedule[key] = assigned
-        logger.info(f"Scheduled {key}: {assigned}")
 
-    return schedule, stream_pos
-
+# ---------------------------------------------------------------------------
+# Convenience wrappers (weekday / weekend / IR)
+# ---------------------------------------------------------------------------
 
 def schedule_weekday_mercy(
     people: List[Dict[str, Any]],
     dates: List[date],
-    cursor: float = 0,
+    cursor: float = 0.0,
     vacation_map: Optional[Dict[str, List[str]]] = None,
-) -> Tuple[Dict[str, List[Tuple[str, str]]], float]:
-    """Convenience: Schedule inpatient weekday (M0, M1, M2, M3)."""
+    shift_names: Optional[List[str]] = None,
+    shift_weights: Optional[Dict[str, float]] = None,
+) -> Tuple[Schedule, float]:
+    """Mercy weekday M0/M1/M2/M3 with weighted cursor."""
+    _shift_names = shift_names or ["M0", "M1", "M2", "M3"]
+    _weights = shift_weights or {"M0": 0.25, "M1": 1.00, "M2": 1.00, "M3": 0.75}
     return schedule_period(
         people=people,
         dates=dates,
-        shifts_per_period=4,
-        shift_names=["M0", "M1", "M2", "M3"],
+        shifts_per_period=len(_shift_names),
+        shift_names=_shift_names,
+        shift_weights=_weights,
         cursor=cursor,
         vacation_map=vacation_map,
         avoid_previous=False,
@@ -156,32 +215,19 @@ def schedule_weekday_mercy(
 
 def schedule_weekend_mercy(
     people: List[Dict[str, Any]],
-    saturday_dates: List[date],
-    cursor: float = 0,
+    dates: List[date],
+    cursor: float = 0.0,
     vacation_map: Optional[Dict[str, List[str]]] = None,
-) -> Tuple[Dict[str, List[Tuple[str, str]]], float]:
-    """
-    Schedule inpatient weekend (M0 Weekend, EP, Dx-CALL).
-    Uses Saturday date as period key; avoid_previous=True for back-to-back prevention.
-    """
-    # Include both Sat and Sun in vacation check for each weekend
-    expanded_vacation: Dict[str, List[str]] = {}
-    if vacation_map:
-        for sat in saturday_dates:
-            sat_str = sat.strftime("%Y-%m-%d")
-            from datetime import timedelta
-            sun = sat + timedelta(days=1)
-            sun_str = sun.strftime("%Y-%m-%d")
-            unavailable = set(vacation_map.get(sat_str, []) + vacation_map.get(sun_str, []))
-            expanded_vacation[sat_str] = list(unavailable)
-
+) -> Tuple[Schedule, float]:
+    """Weekend M0_WEEKEND/EP/Dx-CALL with back-to-back avoidance."""
     return schedule_period(
         people=people,
-        dates=saturday_dates,
+        dates=dates,
         shifts_per_period=3,
-        shift_names=["M0 Weekend", "EP", "Dx-CALL"],
+        shift_names=["M0_WEEKEND", "EP", "Dx-CALL"],
+        shift_weights={"M0_WEEKEND": 0.25, "EP": 0.81, "Dx-CALL": 1.00},
         cursor=cursor,
-        vacation_map=expanded_vacation or vacation_map,
+        vacation_map=vacation_map,
         avoid_previous=True,
         allow_fallback=True,
         use_weighted_cursor=True,
@@ -191,15 +237,18 @@ def schedule_weekend_mercy(
 def schedule_ir_weekday(
     people: List[Dict[str, Any]],
     dates: List[date],
-    cursor: float = 0,
+    cursor: float = 0.0,
     vacation_map: Optional[Dict[str, List[str]]] = None,
-) -> Tuple[Dict[str, List[Tuple[str, str]]], float]:
-    """Schedule IR weekday shifts (IR1, IR2). Pool must be IR-qualified."""
+) -> Tuple[Schedule, float]:
+    """IR weekday IR-1/IR-2. Pool must be IR-qualified (4 radiologists)."""
+    if len(people) < 2:
+        raise ValueError(f"IR pool has only {len(people)} person(s); need ≥2 for IR-1/IR-2.")
     return schedule_period(
         people=people,
         dates=dates,
         shifts_per_period=2,
-        shift_names=["IR1", "IR2"],
+        shift_names=["IR-1", "IR-2"],
+        shift_weights={"IR-1": 1.00, "IR-2": 1.00},
         cursor=cursor,
         vacation_map=vacation_map,
         avoid_previous=False,
@@ -208,39 +257,345 @@ def schedule_ir_weekday(
     )
 
 
+# ---------------------------------------------------------------------------
+# BLOCK SCHEDULING ENGINE
+# ---------------------------------------------------------------------------
+
+def schedule_blocks(
+    roster: List[Dict[str, Any]],
+    dates: List[date],
+    cursor_state: Dict[str, float],
+    vacation_map: Optional[Dict[str, List[str]]] = None,
+    blocks: Optional[List[Dict[str, Any]]] = None,
+    interactive: bool = False,
+    weekend_dates: Optional[List[date]] = None,
+) -> Tuple[Schedule, Dict[str, float]]:
+    """
+    Schedule multiple blocks in priority order, merging results per date.
+
+    Block scheduling order (from schedule_config.SCHEDULING_BLOCKS):
+      1. IR first (qualification-gated)
+      2. M3 second (evening shift)
+      3. M0 helper
+      4. M1 + M2 full day shifts
+      5. Weekend block (optional)
+
+    Args:
+        roster:        Full roster (will be filtered per block's pool_filter).
+        dates:         Weekday dates to schedule (weekend_dates separate).
+        cursor_state:  Dict of {cursor_key: float} — mutated in place & returned.
+        vacation_map:  {date_str: [unavailable_names]}.
+        blocks:        List of block dicts (from schedule_config.SCHEDULING_BLOCKS).
+                       Defaults to schedule_config.SCHEDULING_BLOCKS.
+        interactive:   If True, prompt user before each block.
+        weekend_dates: Saturday dates for weekend blocks (optional).
+
+    Returns:
+        (merged_schedule, updated_cursor_state)
+        merged_schedule: all blocks merged into {date_str: [(shift, name), ...]}
+    """
+    from src.schedule_config import SCHEDULING_BLOCKS
+
+    if blocks is None:
+        blocks = SCHEDULING_BLOCKS
+
+    if vacation_map is None:
+        vacation_map = {}
+
+    merged: Schedule = {}
+    blocks_sorted = sorted(blocks, key=lambda b: b["priority"])
+
+    for block in blocks_sorted:
+        config = block["config"]
+        block_id = block["block_id"]
+        label = block["label"]
+        can_skip = block.get("can_skip", True)
+        schedule_type = config.get("schedule_type", "weekday")
+        pool_filter = config.get("pool_filter")
+        subspecialty_gate = block.get("subspecialty_gate")
+        exclude_ir = block.get("exclude_ir", False)
+        require_mri = config.get("require_participates_mri", False)
+        require_pet = config.get("require_participates_pet", False)
+
+        # Filter pool — exclude_ir is a hard gate for mercy/weekend blocks
+        pool = _filter_pool(
+            roster, pool_filter, subspecialty_gate, exclude_ir=exclude_ir,
+            require_participates_mri=require_mri, require_participates_pet=require_pet,
+        )
+
+        # SOFT prefer: sort so preferred subspecialty tag holders are first (cursor picks them earlier)
+        preferred = config.get("preferred_subspecialty")
+        if preferred and pool:
+            tag_lower = preferred.lower()
+            pool = sorted(
+                pool,
+                key=lambda p: (0 if tag_lower in [s.lower() for s in p.get("subspecialties", [])] else 1, p["index"]),
+            )
+
+        if not pool:
+            logger.warning(f"Block '{label}': empty pool after filter — skipping")
+            continue
+
+        # Interactive confirmation
+        if interactive:
+            prompt = block.get("interactive_prompt", f"Schedule {label}?")
+            skip = _interactive_confirm(prompt, can_skip=can_skip)
+            if skip:
+                logger.info(f"Skipped block: {label}")
+                continue
+
+        # Determine dates for this block
+        if schedule_type == "weekend":
+            if not weekend_dates:
+                logger.debug(f"Block '{label}': no weekend_dates — skipping")
+                continue
+            block_dates = weekend_dates
+        else:
+            block_dates = list(dates)
+
+        # 2-week cycle + fixed weekdays (for weekday blocks)
+        if block_id != "ir_call" and block_dates and schedule_type == "weekday":
+            from src.schedule_config import (
+                TASK_FIXED_WEEKDAYS,
+                REMOTE_GEN_CYCLE_WEEKDAYS,
+                NC_GEN_WEEK2_WEEKDAYS,
+            )
+            cycle_start = block_dates[0]
+            shift_names_block = config.get("shift_names", [])
+
+            # Remote-Gen (gen_nonir): build dates from 2-week cycle with multi-slot days
+            if block_id == "gen_nonir" and "Remote-Gen" in shift_names_block:
+                block_dates = _build_remote_gen_cycle_dates(dates, cycle_start, REMOTE_GEN_CYCLE_WEEKDAYS)
+                logger.debug(f"Block '{label}': Remote-Gen cycle dates → {len(block_dates)} slots")
+            else:
+                # Fixed day-of-week: filter to allowed weekdays for this block's shifts
+                for sh in shift_names_block:
+                    if sh in TASK_FIXED_WEEKDAYS:
+                        allowed = TASK_FIXED_WEEKDAYS[sh]
+                        block_dates = [d for d in block_dates if d.weekday() in allowed]
+                        break
+                # NC-Gen: week 2 only Mon–Tue
+                if block_id == "nc_gen":
+                    block_dates = [
+                        d for d in block_dates
+                        if (_cycle_week(d, cycle_start) != 1) or (d.weekday() in NC_GEN_WEEK2_WEEKDAYS)
+                    ]
+                    logger.debug(f"Block '{label}': NC-Gen cycle filter → {len(block_dates)} dates")
+
+        # Optional: restrict to specific weekdays (e.g. O'Toole Mon/Tue/Wed only)
+        allowed_weekdays = config.get("allowed_weekdays")
+        if allowed_weekdays is not None and block_dates and block_id != "ir_call":
+            block_dates = [d for d in block_dates if d.weekday() in allowed_weekdays]
+            logger.debug(f"Block '{label}': allowed_weekdays {allowed_weekdays} → {len(block_dates)} dates")
+        # Optional: cap weekdays per week (demand-based)
+        slots_per_week = config.get("slots_per_week")
+        if slots_per_week is not None and block_dates and schedule_type == "weekday" and block_id not in ("ir_call", "gen_nonir"):
+            from itertools import groupby
+            def week_key(d):
+                return d.isocalendar()[0], d.isocalendar()[1]
+            block_dates_sorted = sorted(block_dates)
+            limited = []
+            for (_y, _w), week_dates in groupby(block_dates_sorted, key=week_key):
+                week_list = list(week_dates)
+                limited.extend(week_list[: int(slots_per_week)])
+            block_dates = limited
+            logger.debug(f"Block '{label}': slots_per_week={slots_per_week} → {len(block_dates)} dates")
+        if not block_dates:
+            logger.info(f"Block '{label}': no dates — skipping")
+            continue
+
+        cursor_key = config["cursor_key"]
+        cursor = cursor_state.get(cursor_key, 0.0)
+
+        concurrent_ok = block.get("concurrent_ok", False)
+
+        # Build augmented vacation map: existing vacation PLUS names already
+        # assigned in earlier blocks on each date (prevents double-booking).
+        # Hard: No IR weekday + Gen same day; no radiologist with 2 distinct weekday tasks.
+        _IR_WEEKDAY_SHIFTS = {"IR-1", "IR-2"}
+        _EXCLUSIVE_WEEKDAY_SHIFTS = {"M0", "M1", "M2", "M3", "IR-1", "IR-2"}
+        augmented_vacation = {}
+        for d in (vacation_map or {}):
+            augmented_vacation[d] = list(vacation_map.get(d, []))
+        if not concurrent_ok:
+            for date_str, prior_assignments in merged.items():
+                prior_names = [name for _, name in prior_assignments if name != "UNFILLED"]
+                if prior_names:
+                    if date_str not in augmented_vacation:
+                        augmented_vacation[date_str] = []
+                    augmented_vacation[date_str] = list(set(
+                        augmented_vacation.get(date_str, []) + prior_names
+                    ))
+        # Always exclude IR-1/IR-2 assignees from all other blocks on that date
+        for date_str, prior_assignments in merged.items():
+            ir_weekday_names = [
+                name for shift, name in prior_assignments
+                if name != "UNFILLED" and shift in _IR_WEEKDAY_SHIFTS
+            ]
+            if ir_weekday_names:
+                if date_str not in augmented_vacation:
+                    augmented_vacation[date_str] = []
+                augmented_vacation[date_str] = list(set(
+                    augmented_vacation.get(date_str, []) + ir_weekday_names
+                ))
+        # No radiologist may cover 2 distinct weekday tasks: exclude anyone with
+        # any exclusive weekday shift (M0,M1,M2,M3,IR-1,IR-2) from other blocks that day.
+        for date_str, prior_assignments in merged.items():
+            exclusive_names = [
+                name for shift, name in prior_assignments
+                if name != "UNFILLED" and shift in _EXCLUSIVE_WEEKDAY_SHIFTS
+            ]
+            if exclusive_names:
+                if date_str not in augmented_vacation:
+                    augmented_vacation[date_str] = []
+                augmented_vacation[date_str] = list(set(
+                    augmented_vacation.get(date_str, []) + exclusive_names
+                ))
+        # Outpatient blocks: at most one outpatient assignment per person per day
+        if concurrent_ok:
+            from src.schedule_config import OUTPATIENT_SHIFTS
+            for date_str, prior_assignments in merged.items():
+                prior_outpatient_names = [
+                    name for shift, name in prior_assignments
+                    if name != "UNFILLED" and shift in OUTPATIENT_SHIFTS
+                ]
+                if prior_outpatient_names:
+                    if date_str not in augmented_vacation:
+                        augmented_vacation[date_str] = []
+                    augmented_vacation[date_str] = list(set(
+                        augmented_vacation.get(date_str, []) + prior_outpatient_names
+                    ))
+
+        # IR-CALL: weekend-only, mirrored — one person per weekend for both Sat and Sun
+        if block_id == "ir_call" and weekend_dates:
+            weekend_pairs = _build_weekend_pairs(weekend_dates)
+            if weekend_pairs:
+                block_schedule, new_cursor = _schedule_ir_call_mirrored(
+                    people=pool,
+                    weekend_pairs=weekend_pairs,
+                    cursor=cursor,
+                    vacation_map=augmented_vacation,
+                )
+                cursor_state[cursor_key] = new_cursor
+                for date_str, assignments in block_schedule.items():
+                    if date_str not in merged:
+                        merged[date_str] = []
+                    for shift_name, person_name in assignments:
+                        merged[date_str].append((shift_name, person_name))
+                logger.info(f"Block '{label}' scheduled: IR-CALL mirrored {len(weekend_pairs)} weekends, cursor→{new_cursor:.2f}")
+            continue  # skip schedule_period for IR-CALL (handled above or no pairs)
+
+        block_schedule, new_cursor = schedule_period(
+            people=pool,
+            dates=block_dates,
+            shifts_per_period=config["shifts_per_period"],
+            shift_names=config["shift_names"],
+            shift_weights=config.get("shift_weights"),
+            cursor=cursor,
+            vacation_map=augmented_vacation,
+            avoid_previous=config.get("avoid_previous", False),
+            allow_fallback=config.get("allow_fallback", True),
+            use_weighted_cursor=config.get("use_weighted_cursor", True),
+        )
+
+        cursor_state[cursor_key] = new_cursor
+
+        # Merge into master schedule. Most shifts: at most one per (date, shift).
+        # Remote-Gen (and others in ALLOW_MULTIPLE_PER_SLOT_SHIFTS) may have up to MAX_SLOTS_PER_SHIFT.
+        from src.schedule_config import ALLOW_MULTIPLE_PER_SLOT_SHIFTS, MAX_SLOTS_PER_SHIFT
+        for date_str, assignments in block_schedule.items():
+            if date_str not in merged:
+                merged[date_str] = []
+            shift_counts = {}
+            for _s, _ in merged[date_str]:
+                shift_counts[_s] = shift_counts.get(_s, 0) + 1
+            for shift_name, person_name in assignments:
+                max_allowed = MAX_SLOTS_PER_SHIFT.get(shift_name, 1) if shift_name in ALLOW_MULTIPLE_PER_SLOT_SHIFTS else 1
+                current = shift_counts.get(shift_name, 0)
+                if current >= max_allowed:
+                    logger.warning(
+                        f"Block '{label}': skipping (date={date_str}, shift={shift_name}) — already {current} assigned (max={max_allowed})"
+                    )
+                    continue
+                merged[date_str].append((shift_name, person_name))
+                shift_counts[shift_name] = current + 1
+
+        logger.info(f"Block '{label}' scheduled: {sum(len(v) for v in block_schedule.values())} assignments, cursor→{new_cursor:.2f}")
+
+    return merged, cursor_state
+
+
+# ---------------------------------------------------------------------------
+# Fairness Metrics
+# ---------------------------------------------------------------------------
+
 def calculate_fairness_metrics(
-    schedule: Dict[str, List[Tuple[str, str]]],
+    schedule: Schedule,
     people: List[Dict[str, Any]],
     shift_weights: Optional[Dict[str, float]] = None,
 ) -> Dict[str, Any]:
     """
-    Calculate fairness metrics: counts, weighted counts, mean, std, CV.
+    Calculate per-radiologist counts, weighted workload, CV, and per-shift breakdown.
 
-    Returns dict with: mean, std, cv, min, max, counts (raw), weighted_counts
+    Returns:
+        {
+          mean, std, cv, min, max,
+          counts: {name: int},
+          weighted_counts: {name: float},
+          per_shift: {shift_name: {name: int}},
+          unfilled: int,
+        }
     """
-    import math
+    from src.schedule_config import SHIFT_DEFINITIONS
 
     if shift_weights is None:
-        shift_weights = {}
-    for k, v in DEFAULT_SHIFT_DEFINITIONS.items():
-        if k not in shift_weights:
-            shift_weights[k] = v["weight"]
+        shift_weights = {k: v["weight"] for k, v in SHIFT_DEFINITIONS.items()}
+    shift_hours = {k: v.get("hours", 8) for k, v in SHIFT_DEFINITIONS.items()}
 
     raw_counts: Dict[str, int] = {p["name"]: 0 for p in people}
     weighted_counts: Dict[str, float] = {p["name"]: 0.0 for p in people}
+    hours_counts: Dict[str, float] = {p["name"]: 0.0 for p in people}
+    per_shift: Dict[str, Dict[str, int]] = {}
+    unfilled = 0
 
     for _date, assignments in schedule.items():
         for shift_name, person_name in assignments:
-            if person_name in raw_counts:
-                raw_counts[person_name] += 1
-                w = shift_weights.get(shift_name, get_shift_weight(shift_name))
-                weighted_counts[person_name] += w
+            if person_name == "UNFILLED":
+                unfilled += 1
+                continue
+            if person_name not in raw_counts:
+                # Radiologist not in current roster (e.g. locum) — skip
+                continue
+
+            raw_counts[person_name] += 1
+            w = shift_weights.get(shift_name, 1.0)
+            weighted_counts[person_name] += w
+            hrs = shift_hours.get(shift_name, 8)
+            hours_counts[person_name] += hrs
+
+            if shift_name not in per_shift:
+                per_shift[shift_name] = {p["name"]: 0 for p in people}
+            if person_name in per_shift[shift_name]:
+                per_shift[shift_name][person_name] += 1
 
     values = list(weighted_counts.values())
-    mean_val = sum(values) / len(values) if values else 0
-    variance = sum((v - mean_val) ** 2 for v in values) / len(values) if values else 0
+    mean_val = sum(values) / len(values) if values else 0.0
+    variance = sum((v - mean_val) ** 2 for v in values) / len(values) if values else 0.0
     std_val = math.sqrt(variance)
-    cv = (std_val / mean_val * 100) if mean_val > 0 else 0
+    cv = (std_val / mean_val * 100) if mean_val > 0 else 0.0
+
+    hours_values = list(hours_counts.values())
+    hours_mean = sum(hours_values) / len(hours_values) if hours_values else 0.0
+    hours_variance = sum((v - hours_mean) ** 2 for v in hours_values) / len(hours_values) if hours_values else 0.0
+    hours_std = math.sqrt(hours_variance)
+    hours_cv = (hours_std / hours_mean * 100) if hours_mean > 0 else 0.0
+
+    per_shift_cv: Dict[str, float] = {}
+    for shift, counts in per_shift.items():
+        sv = list(counts.values())
+        sm = sum(sv) / len(sv) if sv else 0
+        sv_std = math.sqrt(sum((v - sm) ** 2 for v in sv) / len(sv)) if sv else 0
+        per_shift_cv[shift] = (sv_std / sm * 100) if sm > 0 else 0.0
 
     return {
         "mean": mean_val,
@@ -250,17 +605,221 @@ def calculate_fairness_metrics(
         "max": max(values) if values else 0,
         "counts": raw_counts,
         "weighted_counts": weighted_counts,
+        "hours_counts": hours_counts,
+        "hours_mean": hours_mean,
+        "hours_std": hours_std,
+        "hours_cv": hours_cv,
+        "per_shift": per_shift,
+        "per_shift_cv": per_shift_cv,
+        "unfilled": unfilled,
     }
 
 
-# Re-export for backwards compatibility with scheduling_engine
-def load_roster_from_file(path: str) -> List[Dict[str, Any]]:
-    """Load roster from CSV path."""
-    from pathlib import Path
-    return load_roster(Path(path))
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+
+def _cycle_week(d: date, cycle_start: date) -> int:
+    """Return 0 = first week of cycle, 1 = second week. Cycle repeats every 2 weeks."""
+    return ((d - cycle_start).days // 7) % 2
 
 
-def load_vacation_from_file(path: str) -> Dict[str, List[str]]:
-    """Load vacation map from CSV path."""
-    from pathlib import Path
-    return load_vacation_map(Path(path))
+def _build_remote_gen_cycle_dates(
+    dates: List[date],
+    cycle_start: date,
+    cycle_weekdays: Dict[int, Dict[int, int]],
+) -> List[date]:
+    """
+    Build list of dates for Remote-Gen from 2-week cycle rules.
+    Each date is repeated n_slots times (e.g. Week 2 Mon repeated 2).
+    """
+    out: List[date] = []
+    for d in dates:
+        if d.weekday() >= 5:
+            continue
+        cw = _cycle_week(d, cycle_start)
+        wd = d.weekday()
+        slots = cycle_weekdays.get(cw, {}).get(wd, 0)
+        for _ in range(slots):
+            out.append(d)
+    return out
+
+
+def _build_weekend_pairs(weekend_dates: List[date]) -> List[Tuple[date, date]]:
+    """
+    Group weekend_dates (chronological Sat, Sun, Sat, Sun, ...) into (sat, sun) pairs.
+    Drops any trailing Saturday without a Sunday.
+    """
+    pairs: List[Tuple[date, date]] = []
+    i = 0
+    while i + 1 < len(weekend_dates):
+        sat = weekend_dates[i]
+        sun = weekend_dates[i + 1]
+        if sat.weekday() == 5 and sun.weekday() == 6:
+            pairs.append((sat, sun))
+            i += 2
+        else:
+            i += 1
+    return pairs
+
+
+def _schedule_ir_call_mirrored(
+    people: List[Dict[str, Any]],
+    weekend_pairs: List[Tuple[date, date]],
+    cursor: float,
+    vacation_map: Optional[Dict[str, List[str]]] = None,
+) -> Tuple[Schedule, float]:
+    """
+    Assign one IR staff per weekend to both Saturday and Sunday (mirrored).
+    Returns (schedule, new_cursor).
+    """
+    if vacation_map is None:
+        vacation_map = {}
+    people_sorted = sorted(people, key=lambda p: p["index"])
+    N = len(people_sorted)
+    if N == 0:
+        return {}, cursor
+
+    schedule: Schedule = {}
+    float_cursor = float(cursor)
+    for sat, sun in weekend_pairs:
+        sat_str = sat.isoformat()
+        sun_str = sun.isoformat()
+        unavailable_sat = set(vacation_map.get(sat_str, []))
+        unavailable_sun = set(vacation_map.get(sun_str, []))
+        unavailable_both = unavailable_sat | unavailable_sun
+        start_pos = int(math.floor(float_cursor)) % N
+        person = None
+        for offset in range(N):
+            pos = (start_pos + offset) % N
+            p = people_sorted[pos]
+            if p["name"] in unavailable_both:
+                continue
+            person = p
+            break
+        float_cursor += 1.0  # advance cursor by one IR-CALL weight per weekend
+        name = person["name"] if person else "UNFILLED"
+        schedule[sat_str] = [("IR-CALL", name)]
+        schedule[sun_str] = [("IR-CALL", name)]
+    return schedule, float_cursor
+
+
+def _filter_pool(
+    roster: List[Dict[str, Any]],
+    pool_filter: Optional[str],
+    subspecialty_gate: Optional[str] = None,
+    exclude_ir: bool = False,
+    require_participates_mri: bool = False,
+    require_participates_pet: bool = False,
+) -> List[Dict[str, Any]]:
+    """
+    Filter roster by pool membership, optional subspecialty gate, and MRI/PET participation.
+
+    Args:
+        pool_filter:      Roster key that must be True (e.g. 'participates_mercy').
+        subspecialty_gate: Required subspecialty tag (e.g. 'ir', 'MRI', 'Breast-Proc').
+        exclude_ir:       Hard-exclude participates_ir=True staff regardless of
+                          any other flag.
+        require_participates_mri: If True, only staff with participates_MRI=True.
+        require_participates_pet: If True, only staff with participates_PET=True.
+    """
+    result = roster
+    if pool_filter:
+        result = [p for p in result if p.get(pool_filter, False)]
+    if exclude_ir:
+        result = [p for p in result if not p.get("participates_ir", False)]
+    if subspecialty_gate:
+        gate = subspecialty_gate.lower()
+        result = [
+            p for p in result
+            if gate in [s.lower() for s in p.get("subspecialties", [])]
+        ]
+    if require_participates_mri:
+        result = [p for p in result if p.get("participates_MRI", False)]
+    if require_participates_pet:
+        result = [p for p in result if p.get("participates_PET", False)]
+    return result
+
+
+def _interactive_confirm(prompt: str, can_skip: bool = True) -> bool:
+    """
+    Prompt user interactively. Returns True if block should be SKIPPED.
+    Non-interactive environments auto-proceed.
+    """
+    suffix = " [Y/n/skip]" if can_skip else " [Y/n]"
+    try:
+        ans = input(f"\n▶ {prompt}{suffix}: ").strip().lower()
+    except (EOFError, KeyboardInterrupt):
+        # Non-interactive (CI, test) — auto-proceed
+        return False
+    if ans in ("n", "no"):
+        return True  # skip
+    if can_skip and ans in ("s", "skip"):
+        return True
+    return False  # proceed
+
+
+def get_weekday_dates(start: date, end: date) -> List[date]:
+    """Return all Monday-Friday dates in [start, end]."""
+    out = []
+    d = start
+    while d <= end:
+        if d.weekday() < 5:
+            out.append(d)
+        d += timedelta(days=1)
+    return out
+
+
+def get_saturday_dates(start: date, end: date) -> List[date]:
+    """Return all Saturdays in [start, end]."""
+    out = []
+    d = start
+    while d <= end:
+        if d.weekday() == 5:
+            out.append(d)
+        d += timedelta(days=1)
+    return out
+
+
+def get_weekend_dates(start: date, end: date) -> List[date]:
+    """
+    Return all Saturdays and Sundays in [start, end], interleaved in
+    chronological order (Sat, Sun, Sat, Sun, ...).
+
+    Passing this list as weekend_dates to schedule_blocks() causes the
+    cursor to advance after each day, so Saturday and Sunday are assigned
+    to DIFFERENT radiologists from the same eligible pool.  Shift types
+    are identical (EP, M0_WEEKEND, Dx-CALL, etc.); only personnel differ.
+    """
+    out = []
+    d = start
+    while d <= end:
+        if d.weekday() in (5, 6):   # Saturday=5, Sunday=6
+            out.append(d)
+        d += timedelta(days=1)
+    return out
+
+
+def expand_weekend_to_sunday(schedule: "Schedule") -> "Schedule":
+    """
+    DEPRECATED — replaced by get_weekend_dates().
+
+    Previously mirrored Saturday assignments onto Sunday (same personnel).
+    Now Sunday is scheduled independently via get_weekend_dates() so each
+    day gets distinct radiologists.  Kept for backward compatibility only.
+    """
+    import warnings
+    warnings.warn(
+        "expand_weekend_to_sunday() is deprecated. Pass get_weekend_dates() "
+        "as weekend_dates to schedule_blocks() instead.",
+        DeprecationWarning, stacklevel=2,
+    )
+    expanded = dict(schedule)
+    for date_str, assignments in list(schedule.items()):
+        d = date.fromisoformat(date_str)
+        if d.weekday() == 5:
+            sunday = d + timedelta(days=1)
+            sun_str = sunday.isoformat()
+            if sun_str not in expanded:
+                expanded[sun_str] = list(assignments)
+    return expanded
