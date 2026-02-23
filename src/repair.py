@@ -35,6 +35,27 @@ PREFERRED_TAG_BY_SHIFT: Dict[str, str] = {
     "O'Toole": "Breast-Proc",
 }
 
+# Clinically-acceptable fallback subspecialty tags for repair.
+# When the strict pool is exhausted, people with ANY tag in this set are
+# eligible candidates.  E.g. Breast-Proc staff can read remote breast if
+# all MG-tagged staff are occupied; nm (nuclear med) staff can read PET.
+REPAIR_ACCEPTABLE_TAGS: Dict[str, set] = {
+    "Remote-Breast": {"mg", "breast-proc"},
+    "Enc-Breast":    {"mg", "breast-proc"},
+    "Wash-Breast":   {"mg", "breast-proc"},
+    "NC-Breast":     {"mg", "breast-proc"},
+    "Remote-PET":    {"pet", "nm"},
+    "Poway-PET":     {"pet", "nm"},
+    "NC-PET":        {"pet", "nm"},
+    "Wknd-PET":      {"pet", "nm"},
+    "Remote-MRI":    {"mri", "mri+proc"},
+    "Enc-MRI":       {"mri", "mri+proc"},
+    "Wash-MRI":      {"mri", "mri+proc"},
+    "Poway-MRI":     {"mri", "mri+proc"},
+    "NC-MRI":        {"mri", "mri+proc"},
+    "Wknd-MRI":      {"mri", "mri+proc"},
+}
+
 
 def _shift_to_block() -> Dict[str, Dict[str, Any]]:
     """Build shift_name -> block dict (first block that contains the shift wins)."""
@@ -105,6 +126,65 @@ def get_pool_for_shift(
     return [p for p in pool if p["name"] not in exclude]
 
 
+def get_relaxed_pool_for_shift(
+    roster: List[Dict[str, Any]],
+    shift_name: str,
+    schedule: Dict[str, List[Tuple[str, str]]],
+    date_str: str,
+    vacation_map: Dict[str, List[str]],
+) -> List[Dict[str, Any]]:
+    """
+    Wider fallback pool for repair: uses REPAIR_ACCEPTABLE_TAGS instead of
+    the block's strict subspecialty_gate.  Pool_filter and exclude_ir are
+    still honoured so IR staff don't leak into non-IR blocks.
+
+    Only returns candidates NOT already in the strict pool (avoids re-trying
+    candidates that already failed).
+    """
+    acceptable = REPAIR_ACCEPTABLE_TAGS.get(shift_name)
+    if not acceptable:
+        return []
+
+    shift_to_block = _shift_to_block()
+    block = shift_to_block.get(shift_name)
+    if not block:
+        return []
+
+    config = block.get("config", {})
+    pool_filter = config.get("pool_filter")
+    exclude_ir = block.get("exclude_ir", config.get("exclude_ir", False))
+
+    pool = list(roster)
+    if pool_filter:
+        pool = [p for p in pool if p.get(pool_filter, False)]
+    if exclude_ir:
+        pool = [p for p in pool if not p.get("participates_ir", False)]
+
+    # Accept anyone whose subspecialties overlap with the acceptable set
+    relaxed = []
+    for p in pool:
+        specs = {s.lower() for s in p.get("subspecialties", [])}
+        if specs & acceptable:
+            relaxed.append(p)
+
+    assigned_that_day = {
+        name for _shift, name in schedule.get(date_str, [])
+        if name != "UNFILLED"
+    }
+    unavailable = set(vacation_map.get(date_str, []))
+    exclude = assigned_that_day | unavailable
+
+    strict_names = {
+        p["name"]
+        for p in get_pool_for_shift(roster, shift_name, schedule, date_str, vacation_map)
+    }
+
+    return [
+        p for p in relaxed
+        if p["name"] not in exclude and p["name"] not in strict_names
+    ]
+
+
 def _assignment_counts(schedule: Dict[str, List[Tuple[str, str]]]) -> Dict[str, int]:
     """Count how many assignments each person has in the schedule."""
     counts: Dict[str, int] = {}
@@ -151,11 +231,16 @@ def try_repair_slot(
     candidate_name: str,
     checker: Any,
     weekend_dates: Optional[List[str]] = None,
+    relaxed: bool = False,
 ) -> bool:
     """
     Try assigning candidate to this slot. Clone schedule, replace first UNFILLED
     for (slot["date"], slot["task"]) with candidate, run check_all. Return True
     if no hard violations (accept); else False.
+
+    If relaxed=True, SUBSPECIALTY_MISMATCH violations for the slot's shift are
+    tolerated when the candidate has an acceptable fallback tag (per
+    REPAIR_ACCEPTABLE_TAGS).
     """
     schedule_copy = copy.deepcopy(schedule)
     date_str = slot["date"]
@@ -169,6 +254,18 @@ def try_repair_slot(
         return False
 
     hard, _soft = checker.check_all(schedule_copy, weekend_dates=weekend_dates)
+
+    if relaxed and hard:
+        hard = [
+            v for v in hard
+            if not (
+                v.constraint_type == "SUBSPECIALTY_MISMATCH"
+                and v.shift == task
+                and v.staff == candidate_name
+                and task in REPAIR_ACCEPTABLE_TAGS
+            )
+        ]
+
     return len(hard) == 0
 
 
@@ -223,6 +320,8 @@ def run_repair_loop(
             candidates = tier_order_candidates(pool, slot["task"], schedule)
             assigned = False
             preferred_tag = PREFERRED_TAG_BY_SHIFT.get(slot["task"])
+
+            # Pass 1: strict pool
             for person in candidates:
                 specs_lower = [s.lower() for s in person.get("subspecialties", [])]
                 if preferred_tag and preferred_tag.lower() in specs_lower:
@@ -242,6 +341,34 @@ def run_repair_loop(
                     repaired_this_pass += 1
                     assigned = True
                     break
+
+            # Pass 2: relaxed pool (fallback tags) if strict pool exhausted
+            if not assigned and slot["task"] in REPAIR_ACCEPTABLE_TAGS:
+                relaxed_pool = get_relaxed_pool_for_shift(
+                    roster, slot["task"], schedule, slot["date"], vacation_map
+                )
+                relaxed_candidates = tier_order_candidates(
+                    relaxed_pool, slot["task"], schedule
+                )
+                for person in relaxed_candidates:
+                    if try_repair_slot(
+                        schedule, slot, person["name"], checker,
+                        weekend_dates, relaxed=True,
+                    ):
+                        _apply_repair(schedule, slot, person["name"])
+                        repaired.append({
+                            "date": slot["date"],
+                            "task": slot["task"],
+                            "staff": person["name"],
+                            "tier": 4,
+                        })
+                        repaired_this_pass += 1
+                        assigned = True
+                        logger.info(
+                            f"Repair: relaxed fallback filled {slot['task']} on "
+                            f"{slot['date']} with {person['name']}"
+                        )
+                        break
 
         if repaired_this_pass == 0:
             break

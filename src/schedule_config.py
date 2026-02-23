@@ -567,21 +567,29 @@ SCHEDULING_BLOCKS: List[Dict[str, Any]] = [
      "can_skip": False, "exclude_ir": True,
      "interactive_prompt": "Schedule M1 and M2?"},
 
-    # ── 6. O'Toole (Tue/Wed/Thu) — concurrent ─────────────────────────────────
-    {"block_id": "otoole", "label": "O'Toole",
-     "config": OTOOLE_CONFIG, "priority": 6,
-     "can_skip": True, "exclude_ir": False,
-     "subspecialty_gate": "mg",
-     "concurrent_ok": True,
-     "interactive_prompt": "Schedule O'Toole?"},
+    # ── 6–20. Outpatient blocks — optimised priority order ───────────────────
+    # Simulation-derived ordering: schedule scarce-pool specialties (Breast/MG,
+    # MRI, PET) BEFORE general specialties.  The Gen pool is large and absorbs
+    # being scheduled later without increasing unfilled slots.
+    #
+    # Priority order found by scripts/simulate_priority.py (120 evals):
+    #   Enc-Breast → Remote-Breast → Wash-MRI → Remote-MRI → O'Toole →
+    #   Remote-PET → Remote-Gen-1 → Poway-MRI → Poway-PET → Wash-Breast →
+    #   Remote-Gen-2 → NC-Gen → Enc-MRI → Enc-Gen → Poway-Gen
 
-    # ── 7. Washington — fixed days ────────────────────────────────────────────
-    {"block_id": "wash_breast", "label": "Washington Breast (Mon/Fri)",
-     "config": WASH_BREAST_CONFIG, "priority": 7,
+    {"block_id": "enc_breast", "label": "Encinitas Breast (Tue/Wed)",
+     "config": ENC_BREAST_CONFIG, "priority": 6,
+     "can_skip": True, "exclude_ir": True,
+     "subspecialty_gate": "mg",
+     "concurrent_ok": True,
+     "interactive_prompt": "Schedule Encinitas Breast (Tue/Wed)?"},
+
+    {"block_id": "remote_breast", "label": "Remote Breast",
+     "config": REMOTE_BREAST_CONFIG, "priority": 7,
      "can_skip": True, "exclude_ir": False,
      "subspecialty_gate": "mg",
      "concurrent_ok": True,
-     "interactive_prompt": "Schedule Washington Breast (Mon/Fri)?"},
+     "interactive_prompt": "Schedule Remote Breast?"},
 
     {"block_id": "wash_mri", "label": "Washington MRI (Tue/Wed/Thu)",
      "config": WASH_MRI_CONFIG, "priority": 8,
@@ -590,35 +598,33 @@ SCHEDULING_BLOCKS: List[Dict[str, Any]] = [
      "concurrent_ok": True,
      "interactive_prompt": "Schedule Washington MRI (Tue/Wed/Thu)?"},
 
-    # ── 8. Encinitas — fixed days ─────────────────────────────────────────────
-    {"block_id": "enc_mri", "label": "Encinitas MRI (Mon)",
-     "config": ENC_MRI_CONFIG, "priority": 9,
+    {"block_id": "remote_mri", "label": "Remote MRI",
+     "config": REMOTE_MRI_CONFIG, "priority": 9,
      "can_skip": True, "exclude_ir": True,
      "subspecialty_gate": "mri",
      "concurrent_ok": True,
-     "interactive_prompt": "Schedule Encinitas MRI (Mon)?"},
+     "interactive_prompt": "Schedule Remote MRI?"},
 
-    {"block_id": "enc_breast", "label": "Encinitas Breast (Tue/Wed)",
-     "config": ENC_BREAST_CONFIG, "priority": 10,
-     "can_skip": True, "exclude_ir": True,
+    {"block_id": "otoole", "label": "O'Toole",
+     "config": OTOOLE_CONFIG, "priority": 10,
+     "can_skip": True, "exclude_ir": False,
      "subspecialty_gate": "mg",
      "concurrent_ok": True,
-     "interactive_prompt": "Schedule Encinitas Breast (Tue/Wed)?"},
+     "interactive_prompt": "Schedule O'Toole?"},
 
-    {"block_id": "enc_gen", "label": "Encinitas Gen (Thu/Fri)",
-     "config": ENC_GEN_CONFIG, "priority": 11,
-     "can_skip": True, "exclude_ir": False,
+    {"block_id": "remote_pet", "label": "Remote PET",
+     "config": REMOTE_PET_CONFIG, "priority": 11,
+     "can_skip": True, "exclude_ir": True,
+     "subspecialty_gate": "pet",
+     "concurrent_ok": True,
+     "interactive_prompt": "Schedule Remote PET?"},
+
+    {"block_id": "remote_gen_1", "label": "Remote Gen (slot 1)",
+     "config": REMOTE_GEN_1_CONFIG, "priority": 12,
+     "can_skip": True, "exclude_ir": True,
      "subspecialty_gate": "gen",
      "concurrent_ok": True,
-     "interactive_prompt": "Schedule Encinitas Gen (Thu/Fri)?"},
-
-    # ── 9. Poway — fixed days ─────────────────────────────────────────────────
-    {"block_id": "poway_gen", "label": "Poway Gen (Mon/Tue)",
-     "config": POWAY_GEN_CONFIG, "priority": 12,
-     "can_skip": True, "exclude_ir": False,
-     "subspecialty_gate": "gen",
-     "concurrent_ok": True,
-     "interactive_prompt": "Schedule Poway Gen (Mon/Tue)?"},
+     "interactive_prompt": "Schedule Remote Gen slot 1?"},
 
     {"block_id": "poway_mri", "label": "Poway MRI (Wed)",
      "config": POWAY_MRI_CONFIG, "priority": 13,
@@ -634,51 +640,47 @@ SCHEDULING_BLOCKS: List[Dict[str, Any]] = [
      "concurrent_ok": True,
      "interactive_prompt": "Schedule Poway PET (Thu/Fri)?"},
 
-    # ── 10. NC-Gen — NC weeks only, Mon–Fri ───────────────────────────────────
-    {"block_id": "nc_gen", "label": "NC Gen (NC weeks Mon–Fri)",
-     "config": NC_GEN_CONFIG, "priority": 15,
+    {"block_id": "wash_breast", "label": "Washington Breast (Mon/Fri)",
+     "config": WASH_BREAST_CONFIG, "priority": 15,
      "can_skip": True, "exclude_ir": False,
-     "subspecialty_gate": "gen",
+     "subspecialty_gate": "mg",
      "concurrent_ok": True,
-     "interactive_prompt": "Schedule National City Gen (NC weeks only)?"},
+     "interactive_prompt": "Schedule Washington Breast (Mon/Fri)?"},
 
-    # ── 11. Remote Gen slot 1 — week-type-aware days ──────────────────────────
-    {"block_id": "remote_gen_1", "label": "Remote Gen (slot 1)",
-     "config": REMOTE_GEN_1_CONFIG, "priority": 16,
-     "can_skip": True, "exclude_ir": True,
-     "subspecialty_gate": "gen",
-     "concurrent_ok": True,
-     "interactive_prompt": "Schedule Remote Gen slot 1?"},
-
-    # ── 12. Remote Gen slot 2 — KM weeks Mon/Tue only ─────────────────────────
     {"block_id": "remote_gen_2", "label": "Remote Gen (slot 2, KM Mon/Tue)",
-     "config": REMOTE_GEN_2_CONFIG, "priority": 17,
+     "config": REMOTE_GEN_2_CONFIG, "priority": 16,
      "can_skip": True, "exclude_ir": True,
      "subspecialty_gate": "gen",
      "concurrent_ok": True,
      "interactive_prompt": "Schedule Remote Gen slot 2 (KM weeks)?"},
 
-    # ── 13. Remote outpatient ─────────────────────────────────────────────────
-    {"block_id": "remote_mri", "label": "Remote MRI",
-     "config": REMOTE_MRI_CONFIG, "priority": 18,
+    {"block_id": "nc_gen", "label": "NC Gen (NC weeks Mon–Fri)",
+     "config": NC_GEN_CONFIG, "priority": 17,
+     "can_skip": True, "exclude_ir": False,
+     "subspecialty_gate": "gen",
+     "concurrent_ok": True,
+     "interactive_prompt": "Schedule National City Gen (NC weeks only)?"},
+
+    {"block_id": "enc_mri", "label": "Encinitas MRI (Mon)",
+     "config": ENC_MRI_CONFIG, "priority": 18,
      "can_skip": True, "exclude_ir": True,
      "subspecialty_gate": "mri",
      "concurrent_ok": True,
-     "interactive_prompt": "Schedule Remote MRI?"},
+     "interactive_prompt": "Schedule Encinitas MRI (Mon)?"},
 
-    {"block_id": "remote_breast", "label": "Remote Breast",
-     "config": REMOTE_BREAST_CONFIG, "priority": 19,
+    {"block_id": "enc_gen", "label": "Encinitas Gen (Thu/Fri)",
+     "config": ENC_GEN_CONFIG, "priority": 19,
      "can_skip": True, "exclude_ir": False,
-     "subspecialty_gate": "mg",
+     "subspecialty_gate": "gen",
      "concurrent_ok": True,
-     "interactive_prompt": "Schedule Remote Breast?"},
+     "interactive_prompt": "Schedule Encinitas Gen (Thu/Fri)?"},
 
-    {"block_id": "remote_pet", "label": "Remote PET",
-     "config": REMOTE_PET_CONFIG, "priority": 20,
-     "can_skip": True, "exclude_ir": True,
-     "subspecialty_gate": "pet",
+    {"block_id": "poway_gen", "label": "Poway Gen (Mon/Tue)",
+     "config": POWAY_GEN_CONFIG, "priority": 20,
+     "can_skip": True, "exclude_ir": False,
+     "subspecialty_gate": "gen",
      "concurrent_ok": True,
-     "interactive_prompt": "Schedule Remote PET?"},
+     "interactive_prompt": "Schedule Poway Gen (Mon/Tue)?"},
 
     # ── 14. Weekend inpatient — exclusive ─────────────────────────────────────
     {"block_id": "inpatient_weekend", "label": "Weekend Inpatient (M0/EP/Dx-CALL)",

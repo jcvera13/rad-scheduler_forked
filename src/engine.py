@@ -425,8 +425,8 @@ def schedule_blocks(
         # Build augmented vacation map: existing vacation PLUS names already
         # assigned in earlier blocks on each date (prevents double-booking).
         # Hard: No IR weekday + Gen same day; no radiologist with 2 distinct weekday tasks.
-        _IR_WEEKDAY_SHIFTS = {"IR-1", "IR-2"}
-        _EXCLUSIVE_WEEKDAY_SHIFTS = {"M0", "M1", "M2", "M3", "IR-1", "IR-2"}
+        _IR_WEEKDAY_SHIFTS = {"IR-1", "IR-2", "IR-CALL"}
+        _EXCLUSIVE_WEEKDAY_SHIFTS = {"M0", "M1", "M2", "M3", "IR-1", "IR-2", "IR-CALL"}
         augmented_vacation = {}
         for d in (vacation_map or {}):
             augmented_vacation[d] = list(vacation_map.get(d, []))
@@ -508,6 +508,8 @@ def schedule_blocks(
                         if mirror_str not in mirrored:
                             mirrored[mirror_str] = []
                         for shift_name, person_name in assignments:
+                            if person_name == "UNFILLED":
+                                continue
                             mirrored[mirror_str].append((shift_name, person_name))
             # Merge mirrored entries — Sat/Sun IR-CALL
             for date_str, assignments in mirrored.items():

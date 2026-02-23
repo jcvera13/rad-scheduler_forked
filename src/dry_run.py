@@ -40,7 +40,7 @@ from src.engine import (
     get_saturday_dates,
     get_weekend_dates,
 )
-from src.constraints import ConstraintChecker
+from src.constraints import ConstraintChecker, ConstraintSeverity
 from src.exporter import export_to_csv, export_to_excel, export_fairness_report
 from src.skills import get_subspecialty_summary, validate_shift_coverage
 
@@ -275,9 +275,10 @@ def run_dry_run(
 
     # ── 4b. Repair loop (if any unfilled) ───────────────────────────────────
     metrics = calculate_fairness_metrics(full_schedule, roster)
+    relaxed_repairs: set = set()
     if metrics.get("unfilled", 0) > 0:
         from src.repair import run_repair_loop
-        run_repair_loop(
+        repair_result = run_repair_loop(
             full_schedule,
             roster,
             vacation_map,
@@ -287,6 +288,9 @@ def run_dry_run(
             prefix=prefix,
         )
         metrics = calculate_fairness_metrics(full_schedule, roster)
+        for r in repair_result.get("repaired", []):
+            if r.get("tier") == 4:
+                relaxed_repairs.add((r["date"], r["task"], r["staff"]))
 
     # ── 5. Constraint checking ─────────────────────────────────────────────
     print("\nStep 5/6: Checking constraints...")
@@ -297,6 +301,26 @@ def run_dry_run(
         metrics=metrics,
         pool_label="Full Schedule",
     )
+
+    # Downgrade SUBSPECIALTY_MISMATCH violations caused by relaxed-pool
+    # repair (Tier 4) — these are clinically acceptable fallback assignments
+    if relaxed_repairs:
+        downgraded = []
+        kept_hard = []
+        for v in hard_violations:
+            if (
+                v.constraint_type == "SUBSPECIALTY_MISMATCH"
+                and (v.date, v.shift, v.staff) in relaxed_repairs
+            ):
+                v.severity = ConstraintSeverity.SOFT
+                v.description = f"[REPAIR FALLBACK] {v.description}"
+                downgraded.append(v)
+            else:
+                kept_hard.append(v)
+        hard_violations = kept_hard
+        soft_violations.extend(downgraded)
+        if downgraded:
+            print(f"  ℹ Downgraded {len(downgraded)} subspecialty mismatches (repair fallback)")
 
     h_count = len(hard_violations)
     s_count = len(soft_violations)
