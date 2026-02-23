@@ -548,8 +548,38 @@ def calculate_fairness_metrics(
 
 
 # ---------------------------------------------------------------------------
-# Helpers
+# Helpers (public for repair.py)
 # ---------------------------------------------------------------------------
+
+def filter_pool_for_block(
+    roster: List[Dict[str, Any]],
+    block: Dict[str, Any],
+) -> List[Dict[str, Any]]:
+    """
+    Return the eligible pool for a block using the same logic as schedule_blocks.
+    Used by repair.py to get qualified staff for an unfilled slot without duplicating logic.
+
+    Args:
+        roster: Full roster list.
+        block: Block dict with "config" and optional "subspecialty_gate", "exclude_ir".
+
+    Returns:
+        Filtered list of person dicts eligible for this block's shifts.
+    """
+    config = block.get("config", {})
+    pool_filter = config.get("pool_filter")
+    subspecialty_gate = block.get("subspecialty_gate") or config.get("subspecialty_gate")
+    exclude_ir = block.get("exclude_ir", config.get("exclude_ir", False))
+
+    pool = _filter_pool(roster, pool_filter, subspecialty_gate, exclude_ir=exclude_ir)
+
+    if config.get("require_participates_mri", False):
+        pool = [p for p in pool if p.get("participates_MRI", False)]
+    if config.get("require_participates_pet", False):
+        pool = [p for p in pool if p.get("participates_PET", False)]
+
+    return pool
+
 
 def _filter_pool(
     roster: List[Dict[str, Any]],

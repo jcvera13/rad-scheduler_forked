@@ -266,9 +266,23 @@ def run_dry_run(
         save_cursor_state(cursor_state)
         print(f"  ✓ Cursors saved: {cursor_state}")
 
+    # ── 4b. Repair loop (if any unfilled) ───────────────────────────────────
+    metrics = calculate_fairness_metrics(full_schedule, roster)
+    if metrics.get("unfilled", 0) > 0:
+        from src.repair import run_repair_loop
+        run_repair_loop(
+            full_schedule,
+            roster,
+            vacation_map,
+            checker,
+            weekend_dates=sat_strs or None,
+            output_dir=output_dir,
+            prefix=prefix,
+        )
+        metrics = calculate_fairness_metrics(full_schedule, roster)
+
     # ── 5. Constraint checking ─────────────────────────────────────────────
     print("\nStep 5/6: Checking constraints...")
-    metrics = calculate_fairness_metrics(full_schedule, roster)
 
     hard_violations, soft_violations = checker.check_all(
         schedule=full_schedule,
