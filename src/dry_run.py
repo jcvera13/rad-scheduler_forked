@@ -179,20 +179,26 @@ def run_dry_run(
     interactive: bool = False,
     save_cursors: bool = False,
     visual: bool = False,
+    nc_week_anchor: Optional[date] = None,
 ) -> Dict:
     """
     Generate full schedule in dry-run mode (never pushes to QGenda).
 
     Args:
-        start_date:   First date to schedule
-        end_date:     Last date to schedule
-        output_dir:   Directory for output files
-        interactive:  If True, prompt user before each block
-        save_cursors: If True, persist updated cursor state to disk
+        start_date:      First date to schedule
+        end_date:        Last date to schedule
+        output_dir:      Directory for output files
+        interactive:     If True, prompt user before each block
+        save_cursors:    If True, persist updated cursor state to disk
+        nc_week_anchor:  A Monday that is a known NC week; enables 2-week cycle
+                         logic in the engine.  Defaults to 2026-03-02 (first Mon
+                         of real schedule = NC week).
 
     Returns:
         Dict with schedule, metrics, violations, output paths
     """
+    if nc_week_anchor is None:
+        nc_week_anchor = date(2026, 3, 2)   # default: first NC week of real schedule
     output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
     prefix = f"dry_run_{start_date}_{end_date}"
@@ -257,6 +263,7 @@ def run_dry_run(
         vacation_map=vacation_map,
         interactive=interactive,
         weekend_dates=weekend_dates if weekend_dates else None,
+        nc_week_anchor=nc_week_anchor,
     )
 
     total_assignments = sum(len(v) for v in full_schedule.values())
@@ -421,6 +428,15 @@ def main():
         action="store_true",
         help="Generate matplotlib charts (shift/hours distribution, deviation, task breakdown). Reference: scripts/analyze_schedule.py",
     )
+    parser.add_argument(
+        "--nc-week-anchor",
+        default=None,
+        help=(
+            "YYYY-MM-DD date that falls in a known NC week. Enables 2-week cycle "
+            "(NC-Gen Mon–Fri in NC weeks; Remote-Gen-2 in KM weeks Mon/Tue). "
+            "Default: 2026-03-02 (first NC week of real schedule)."
+        ),
+    )
     args = parser.parse_args()
 
     try:
@@ -434,6 +450,14 @@ def main():
         print("Error: start date must be before end date")
         sys.exit(1)
 
+    nc_anchor: Optional[date] = None
+    if args.nc_week_anchor:
+        try:
+            nc_anchor = datetime.strptime(args.nc_week_anchor, "%Y-%m-%d").date()
+        except ValueError as e:
+            print(f"Invalid --nc-week-anchor format: {e}")
+            sys.exit(1)
+
     out_dir = Path(args.output_dir) if args.output_dir else OUTPUTS_DIR
     run_dry_run(
         start, end,
@@ -441,6 +465,7 @@ def main():
         interactive=args.interactive,
         save_cursors=args.save_cursors,
         visual=args.visual,
+        nc_week_anchor=nc_anchor,
     )
 
 

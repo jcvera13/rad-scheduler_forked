@@ -9,6 +9,9 @@ Supports:
   - FTE-weighted assignment frequency
   - Vacation-aware (skipped staff retain position in stream)
   - Back-to-back weekend avoidance (strict + fallback)
+  - 2-week cycle (NC / KM weeks) via nc_week_anchor + week_type on blocks
+  - Per-week-type allowed_weekdays (allowed_weekdays_nc / allowed_weekdays_km)
+  - IR-CALL Fri+Sat+Sun mirror (mirror_weekend flag on block config)
 
 Algorithm:
   People = [A, B, C, D, ...] ordered by index.
@@ -30,6 +33,25 @@ logger = logging.getLogger(__name__)
 
 # Type alias
 Schedule = Dict[str, List[Tuple[str, str]]]   # date_str → [(shift, name)]
+
+# ---------------------------------------------------------------------------
+# Week-parity helper
+# ---------------------------------------------------------------------------
+
+def _get_week_type(d: date, nc_anchor: Optional[date]) -> Optional[str]:
+    """
+    Return 'nc' or 'km' for the given date, relative to the NC-week anchor.
+
+    nc_anchor: any Monday (or date) that falls in a known NC week.
+               Default anchor used in dry_run: 2026-03-02 (first Mon of real schedule).
+    Returns None if nc_anchor is None (parity disabled).
+    """
+    if nc_anchor is None:
+        return None
+    anchor_monday = nc_anchor - timedelta(days=nc_anchor.weekday())
+    this_monday   = d - timedelta(days=d.weekday())
+    weeks_diff    = (this_monday - anchor_monday).days // 7
+    return "nc" if weeks_diff % 2 == 0 else "km"
 
 
 # ---------------------------------------------------------------------------
@@ -269,30 +291,26 @@ def schedule_blocks(
     blocks: Optional[List[Dict[str, Any]]] = None,
     interactive: bool = False,
     weekend_dates: Optional[List[date]] = None,
+    nc_week_anchor: Optional[date] = None,
 ) -> Tuple[Schedule, Dict[str, float]]:
     """
     Schedule multiple blocks in priority order, merging results per date.
 
-    Block scheduling order (from schedule_config.SCHEDULING_BLOCKS):
-      1. IR first (qualification-gated)
-      2. M3 second (evening shift)
-      3. M0 helper
-      4. M1 + M2 full day shifts
-      5. Weekend block (optional)
-
     Args:
-        roster:        Full roster (will be filtered per block's pool_filter).
-        dates:         Weekday dates to schedule (weekend_dates separate).
-        cursor_state:  Dict of {cursor_key: float} — mutated in place & returned.
-        vacation_map:  {date_str: [unavailable_names]}.
-        blocks:        List of block dicts (from schedule_config.SCHEDULING_BLOCKS).
-                       Defaults to schedule_config.SCHEDULING_BLOCKS.
-        interactive:   If True, prompt user before each block.
-        weekend_dates: Saturday dates for weekend blocks (optional).
+        roster:          Full roster (filtered per block's pool_filter).
+        dates:           Weekday dates to schedule (weekend_dates separate).
+        cursor_state:    Dict of {cursor_key: float} — mutated in place & returned.
+        vacation_map:    {date_str: [unavailable_names]}.
+        blocks:          Block dicts (schedule_config.SCHEDULING_BLOCKS).
+        interactive:     If True, prompt user before each block.
+        weekend_dates:   Sat+Sun dates for weekend blocks.
+        nc_week_anchor:  A Monday (or any date) known to be an NC week. Used to
+                         compute week parity (NC/KM) for blocks with week_type or
+                         allowed_weekdays_nc/allowed_weekdays_km. Default: None
+                         (parity disabled; use 2026-03-02 for real schedule).
 
     Returns:
         (merged_schedule, updated_cursor_state)
-        merged_schedule: all blocks merged into {date_str: [(shift, name), ...]}
     """
     from src.schedule_config import SCHEDULING_BLOCKS
 
@@ -330,34 +348,73 @@ def schedule_blocks(
                 logger.info(f"Skipped block: {label}")
                 continue
 
-        # Determine dates for this block
+        # ── Determine date list for this block ──────────────────────────────
         if schedule_type == "weekend":
             if not weekend_dates:
                 logger.debug(f"Block '{label}': no weekend_dates — skipping")
                 continue
-            block_dates = weekend_dates
+            block_dates = list(weekend_dates)
         else:
-            block_dates = dates
-        # Optional: restrict to specific weekdays (e.g. O'Toole Tue/Wed/Fri only)
-        allowed_weekdays = config.get("allowed_weekdays")
-        if allowed_weekdays is not None and block_dates:
-            block_dates = [d for d in block_dates if d.weekday() in allowed_weekdays]
-            logger.debug(f"Block '{label}': filtered to weekdays {allowed_weekdays} → {len(block_dates)} dates")
-        # Optional: cap weekdays per week (demand-based; reduces UNFILLED for outpatient)
+            block_dates = list(dates)
+
+        # 1. week_type filter: only include dates in NC or KM weeks
+        week_type = config.get("week_type")
+        if week_type and nc_week_anchor and block_dates:
+            block_dates = [
+                d for d in block_dates
+                if _get_week_type(d, nc_week_anchor) == week_type
+            ]
+            logger.debug(
+                f"Block '{label}': week_type='{week_type}' → {len(block_dates)} dates"
+            )
+
+        # 2. allowed_weekdays: flat set applies to all weeks.
+        #    allowed_weekdays_nc / allowed_weekdays_km: per-week-type override.
+        allowed_nc = config.get("allowed_weekdays_nc")
+        allowed_km = config.get("allowed_weekdays_km")
+        if (allowed_nc is not None or allowed_km is not None) and nc_week_anchor:
+            filtered = []
+            for d in block_dates:
+                wt = _get_week_type(d, nc_week_anchor)
+                if wt == "nc" and allowed_nc is not None:
+                    if d.weekday() in allowed_nc:
+                        filtered.append(d)
+                elif wt == "km" and allowed_km is not None:
+                    if d.weekday() in allowed_km:
+                        filtered.append(d)
+                else:
+                    filtered.append(d)
+            block_dates = filtered
+            logger.debug(
+                f"Block '{label}': per-week-type allowed_weekdays → {len(block_dates)} dates"
+            )
+        else:
+            # Flat allowed_weekdays (uniform across all weeks)
+            allowed_weekdays = config.get("allowed_weekdays")
+            if allowed_weekdays is not None and block_dates:
+                block_dates = [d for d in block_dates if d.weekday() in allowed_weekdays]
+                logger.debug(
+                    f"Block '{label}': allowed_weekdays {allowed_weekdays} → {len(block_dates)} dates"
+                )
+
+        # 3. slots_per_week cap (demand-based; only for weekday blocks)
         slots_per_week = config.get("slots_per_week")
         if slots_per_week is not None and block_dates and schedule_type == "weekday":
             from itertools import groupby
             def week_key(d):
-                return d.isocalendar()[0], d.isocalendar()[1]  # year, week
+                return d.isocalendar()[0], d.isocalendar()[1]
             block_dates_sorted = sorted(block_dates)
             limited = []
             for (_y, _w), week_dates in groupby(block_dates_sorted, key=week_key):
                 week_list = list(week_dates)
                 limited.extend(week_list[: int(slots_per_week)])
             block_dates = limited
-            logger.debug(f"Block '{label}': slots_per_week={slots_per_week} → {len(block_dates)} dates")
+            logger.debug(
+                f"Block '{label}': slots_per_week={slots_per_week} → {len(block_dates)} dates"
+            )
+
         if not block_dates:
-            logger.info(f"Block '{label}': no dates — skipping")
+            logger.info(f"Block '{label}': no dates after filters — skipping")
             continue
 
         cursor_key = config["cursor_key"]
@@ -436,6 +493,31 @@ def schedule_blocks(
         )
 
         cursor_state[cursor_key] = new_cursor
+
+        # ── mirror_weekend: copy each Friday IR-CALL assignment to Sat + Sun ─
+        # Used for IR-CALL where the same IR person covers Fri+Sat+Sun.
+        if config.get("mirror_weekend"):
+            mirrored: Schedule = {}
+            for date_str, assignments in block_schedule.items():
+                d = date.fromisoformat(date_str)
+                if d.weekday() == 4:   # Friday
+                    sat = d + timedelta(days=1)
+                    sun = d + timedelta(days=2)
+                    for mirror_day in (sat, sun):
+                        mirror_str = mirror_day.isoformat()
+                        if mirror_str not in mirrored:
+                            mirrored[mirror_str] = []
+                        for shift_name, person_name in assignments:
+                            mirrored[mirror_str].append((shift_name, person_name))
+            # Merge mirrored entries — Sat/Sun IR-CALL
+            for date_str, assignments in mirrored.items():
+                if date_str not in block_schedule:
+                    block_schedule[date_str] = []
+                block_schedule[date_str].extend(assignments)
+            if mirrored:
+                logger.info(
+                    f"Block '{label}': mirrored IR-CALL to {len(mirrored)} Sat/Sun dates"
+                )
 
         # Merge into master schedule — at most one assignment per (date, shift)
         # to prevent two radiologists on the same task in exports.

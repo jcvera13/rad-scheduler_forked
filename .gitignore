@@ -1,3 +1,183 @@
+# Python
 __pycache__/
-*.pyc
-*.pyo
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+pip-wheel-metadata/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# Virtual Environments
+venv/
+env/
+ENV/
+env.bak/
+venv.bak/
+.venv
+
+# IDEs and Editors
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.project
+.pydevproject
+.settings/
+*.sublime-project
+*.sublime-workspace
+
+# Jupyter Notebook
+.ipynb_checkpoints
+*.ipynb
+
+# Environment Variables and Secrets
+.env
+.env.local
+.env.*.local
+*.key
+secrets.json
+credentials.json
+
+# API Keys and Tokens
+*_api_key.txt
+*_token.txt
+qgenda_config.json
+
+# Database
+*.db
+*.sqlite
+*.sqlite3
+
+# Logs
+logs/
+*.log
+pip-log.txt
+pip-delete-this-directory.txt
+
+# Testing
+.tox/
+.nox/
+.coverage
+.coverage.*
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+*.py,cover
+.hypothesis/
+.pytest_cache/
+htmlcov/
+
+# OS Files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+desktop.ini
+
+# Temporary Files
+*.tmp
+*.temp
+*.bak
+*.backup
+~*
+
+# Large Data Files (optional - uncomment if needed)
+# *.csv
+# *.xlsx
+# *.xls
+
+# Sensitive Configuration
+config/production_roster.csv
+config/real_vacation_data.csv
+config/staff_emails.csv
+
+# Generated Schedules (optional - uncomment to exclude outputs)
+# output_schedules/
+# exports/
+
+# Build and Distribution
+*.whl
+*.tar.gz
+
+# Documentation Build
+docs/_build/
+site/
+
+# Node.js (if using any JS tools)
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+package-lock.json
+yarn.lock
+
+# Compiled Source
+*.com
+*.class
+*.dll
+*.exe
+*.o
+*.so
+
+# Archive Files
+*.7z
+*.dmg
+*.gz
+*.iso
+*.jar
+*.rar
+*.tar
+*.zip
+
+# Sensitive Analysis Results
+reports/sensitive/
+analysis/confidential/
+
+# QGenda Exports (containing PHI/sensitive data)
+qgenda_exports/
+raw_schedules/
+
+# Backup Files
+*.backup
+backup_*/
+*.BAK*
+*.BAK2
+*.BAK3
+*.bak
+# Other
+DEPLOYMENT_CHECKLIST.md
+DEPLOYMENT_SUMMARY.md
+CONTRIBUTING.md
+LICENSE
+STANDALONE_ANALYZER_FEATURES.md
+deploy_to_github.sh
+rotation_configuration (1).md
+data/
+reports/
+outputs/
+*.png
+*.xlsx
+*.csv
+!config/roster_key.csv
+!config/vacation_map.csv

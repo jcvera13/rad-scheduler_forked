@@ -11,6 +11,7 @@ Old format was space-separated quoted strings — now normalized.
 
 import json
 import logging
+import math
 import re
 from pathlib import Path
 from typing import Any, Dict, List, Optional
@@ -106,6 +107,21 @@ def load_roster(
 
     people: List[Dict[str, Any]] = []
     for _, row in df.iterrows():
+        subspecs = _parse_subspecialties(row.get("subspecialties", ""))
+        # participates_MRI / participates_PET: from column if present, else infer from subspecialties
+        _participates_mri = row.get("participates_MRI")
+        if _participates_mri is None or (isinstance(_participates_mri, float) and math.isnan(_participates_mri)):
+            _participates_mri = any(
+                s and (s.lower() in ("mri", "mri+proc")) for s in subspecs
+            )
+        else:
+            _participates_mri = _parse_yes_no(_participates_mri)
+        _participates_pet = row.get("participates_PET")
+        if _participates_pet is None or (isinstance(_participates_pet, float) and math.isnan(_participates_pet)):
+            _participates_pet = any(s and s.lower() == "pet" for s in subspecs)
+        else:
+            _participates_pet = _parse_yes_no(_participates_pet)
+
         person: Dict[str, Any] = {
             "id":                  int(row["id"]),
             "index":               int(row["index"]),
@@ -120,7 +136,9 @@ def load_roster(
             "participates_gen":       _parse_yes_no(row.get("participates_gen",       "yes")),
             "participates_outpatient":_parse_yes_no(row.get("participates_outpatient","yes")),
             "participates_mg":        _parse_yes_no(row.get("participates_mg",        "no")),
-            "subspecialties":         _parse_subspecialties(row.get("subspecialties", "")),
+            "participates_MRI":       _participates_mri,
+            "participates_PET":       _participates_pet,
+            "subspecialties":         subspecs,
             "notes":                  str(row.get("notes", "") or ""),
         }
 

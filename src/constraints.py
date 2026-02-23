@@ -202,7 +202,8 @@ class ConstraintChecker:
 
     _ir_weekday_shifts: frozenset = frozenset({"IR-1", "IR-2"})
     _gen_shifts: frozenset = frozenset({
-        "Remote-Gen", "Enc-Gen", "Poway-Gen", "NC-Gen", "Wash-Gen",
+        "Remote-Gen", "Remote-Gen-1", "Remote-Gen-2",
+        "Enc-Gen", "Poway-Gen", "NC-Gen", "Wash-Gen",
     })
 
     def check_ir_and_gen_same_day(self, schedule: Schedule) -> List[ConstraintViolation]:
@@ -478,6 +479,42 @@ class ConstraintChecker:
         return violations
 
     # -----------------------------------------------------------------------
+    # SOFT: Task day-of-week validation
+    # -----------------------------------------------------------------------
+
+    def check_task_day_of_week(self, schedule: Schedule) -> List[ConstraintViolation]:
+        """
+        Soft: Warn when a task is assigned on a day not in its allowed-weekday set.
+        Allowed days come from schedule_config.TASK_ALLOWED_WEEKDAYS.
+        """
+        from src.schedule_config import TASK_ALLOWED_WEEKDAYS
+        violations = []
+        for date_str, assignments in schedule.items():
+            try:
+                d = date.fromisoformat(date_str)
+            except (TypeError, ValueError):
+                continue
+            wd = d.weekday()
+            for shift_name, person_name in assignments:
+                if person_name == "UNFILLED":
+                    continue
+                allowed = TASK_ALLOWED_WEEKDAYS.get(shift_name)
+                if allowed is not None and wd not in allowed:
+                    violations.append(ConstraintViolation(
+                        severity=ConstraintSeverity.SOFT,
+                        constraint_type="TASK_DAY_OF_WEEK",
+                        description=(
+                            f"{shift_name} assigned on {d.strftime('%A')} "
+                            f"({date_str}) — not in allowed days {sorted(allowed)}"
+                        ),
+                        date=date_str,
+                        staff=person_name,
+                        shift=shift_name,
+                        details={"weekday": wd, "allowed": sorted(allowed)},
+                    ))
+        return violations
+
+    # -----------------------------------------------------------------------
     # SOFT: CV target check
     # -----------------------------------------------------------------------
 
@@ -559,6 +596,7 @@ class ConstraintChecker:
         hard.extend(self.check_mercy_pool_gate(schedule))
         hard.extend(self.check_weekend_pool_gate(schedule))
         soft.extend(self.check_unfilled(schedule))
+        soft.extend(self.check_task_day_of_week(schedule))
 
         if weekend_dates:
             soft.extend(self.check_back_to_back_weekend(schedule, weekend_dates))
