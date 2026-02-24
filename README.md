@@ -4,7 +4,7 @@ A deterministic, fair scheduling system for **weekday and weekend radiologist co
 
 This project provides a **data-driven scheduling engine** designed for hospital operations where fairness, auditability, and flexibility are critical for managing complex radiologist rotations across multiple sites and subspecialties.
 
-## 🎯 Key Features
+## Key Features
 
 - **Fair Distribution**: Long-term fairness using a modulo/round-robin cycle algorithm
 - **Vacation Aware**: Handles vacations and exemptions without penalizing future assignments
@@ -15,19 +15,19 @@ This project provides a **data-driven scheduling engine** designed for hospital 
 - **QGenda Integration**: Pull schedules and push optimized assignments via REST API
 - **Extensible**: Designed for FTE weighting, subspecialty matching, and GUI additions
 
-### ⭐ NEW: Standalone Schedule Analyzer (No API Access Required!)
+###  Standalone Schedule Analyzer (No API Access Required!)
 
 **Perfect for individual radiologists, schedulers, and staff without admin privileges:**
 
-- ✅ Analyze exported QGenda schedules for fairness
-- ✅ No API keys or admin access needed
-- ✅ Works completely offline with CSV/Excel exports
-- ✅ Generates detailed fairness reports and visualizations
-- ✅ Easy-to-use launcher scripts for Windows and Mac/Linux
+-  Analyze exported QGenda schedules for fairness
+-  No API keys or admin access needed
+-  Works completely offline with CSV/Excel exports
+-  Generates detailed fairness reports and visualizations
+-  Easy-to-use launcher scripts for Windows and Mac/Linux
 
 **See**: `docs/END_USER_GUIDE.md` for complete instructions
 
-## 📋 Table of Contents
+## Table of Contents
 
 - [How It Works](#how-it-works)
 - [Two Usage Modes](#two-usage-modes)
@@ -40,11 +40,11 @@ This project provides a **data-driven scheduling engine** designed for hospital 
 - [Documentation](#documentation)
 - [Contributing](#contributing)
 
-## 🎭 Two Usage Modes
+## Two Usage Modes
 
 This project supports **two distinct modes** depending on your access level and needs:
 
-### Mode 1: Standalone Analyzer (No API Access) ⭐ RECOMMENDED FOR MOST USERS
+### Mode 1: Standalone Analyzer (No API Access)  || RECOMMENDED FOR MOST USERS ||
 
 **Perfect for**: Individual radiologists, schedulers, or anyone without QGenda admin/API access
 
@@ -253,9 +253,9 @@ ALLOW_BACK_TO_BACK_WEEKENDS=false
 ALLOW_FALLBACK_MODE=true
 ```
 
-**⚠️ Security Note**: Never commit your `.env` file to version control. The `.gitignore` is configured to exclude it.
+**Security Note**: Never commit your `.env` file to version control. The `.gitignore` is configured to exclude it.
 
-## 🚀 Usage
+## Usage
 
 ### Dry Run Mode (DEFAULT - No QGenda Push)
 
@@ -339,7 +339,7 @@ current_schedule = client.get_schedule(
 client.update_schedule(mercy_schedule)
 ```
 
-## 📁 Project Structure
+## Project Structure
 
 ```
 radiology-scheduler/
@@ -399,7 +399,7 @@ radiology-scheduler/
     └── test_fairness.py
 ```
 
-## 🔗 API Integration
+## API Integration
 
 ### QGenda REST API
 
@@ -417,7 +417,7 @@ The system integrates with QGenda's REST API for:
 
 See `docs/qgenda_integration.md` for detailed API documentation.
 
-## 📚 Documentation
+## Documentation
 
 Comprehensive documentation is available in the `docs/` directory:
 
@@ -433,7 +433,7 @@ Historical analysis and validation:
 - **Subspecialty Analysis**: Workload distribution across subspecialties
 - **M0 Weighted Analysis**: Impact analysis of M0 shift weighting
 
-## 🧪 Testing
+## Testing
 
 Run the test suite:
 
@@ -448,7 +448,7 @@ python -m pytest --cov=src tests/
 python -m pytest tests/test_scheduling_engine.py
 ```
 
-## 📊 Monitoring and Auditing
+## Monitoring and Auditing
 
 ### Generate Fairness Report
 
@@ -465,7 +465,7 @@ python scripts/validate_fairness.py --schedule mercy_schedule.xlsx --roster rost
 
 **Goal**: CV < 10% indicates excellent fairness
 
-## 🤝 Contributing
+## Contributing
 
 1. Fork the repository
 2. Create a feature branch (`git checkout -b feature/amazing-feature`)
@@ -473,24 +473,24 @@ python scripts/validate_fairness.py --schedule mercy_schedule.xlsx --roster rost
 4. Push to the branch (`git push origin feature/amazing-feature`)
 5. Open a Pull Request
 
-## 📄 License
+## License
 
 This project is licensed under the MIT License - see the LICENSE file for details.
 
-## 🙏 Acknowledgments
+## Acknowledgments
 
 - QGenda for scheduling platform and API access
 - SHIPMG Radiology group for requirements and validation
 - Contributors to the fairness analysis and validation process
 
-## 📞 Support
+## Support
 
 For issues, questions, or feature requests:
 - Open an issue on GitHub
-- Contact: [your-email@hospital.org]
+- Contact: juancarlosvera@gmail.com
 - Documentation: See `docs/` directory
 
-## 🗺️ Roadmap
+## Roadmap
 
 Planned enhancements:
 - [ ] FTE-weighted fairness calculations
