@@ -511,7 +511,7 @@ If you encounter issues:
    ```bash
    python analyze_schedule.py --help
    ```
-4. **Contact your IT department** for Python installation issues
+4. **Contact Devloper (jcvera)** for Python installation issues
 5. **Ask your scheduler** for help exporting from QGenda
 
 ---
