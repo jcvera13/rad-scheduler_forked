@@ -348,7 +348,7 @@ radiology-scheduler/
 ├── LICENSE                            # License information
 ├── requirements.txt                   # Python dependencies
 ├── .gitignore                         # Git exclusions
-├── .env.example                       # Example environment variables
+├── .env.example                       # Example .env (Config., #3)
 │
 ├── src/                               # Source code
 │   ├── config.py                     # Roster, shift definitions, constraint weights
@@ -379,14 +379,7 @@ radiology-scheduler/
 │   ├── qgenda_cleaned.csv            # Historical QGenda export
 │   ├── scheduling_engine_configuration.xlsx
 │   └── workload_comparison.csv
-│
-├── reports/                           # Generated visualizations
-│   ├── comprehensive_fairness_analysis.png
-│   ├── fairness_visualization.png
-│   ├── m0_weighted_analysis_visual.png
-│   ├── monthly_trend.png
-│   └── scheduling_analysis_visual_summary.png
-│
+|
 ├── scripts/                           # Utility scripts
 │   ├── generate_schedule.py          # Main schedule generation
 │   ├── extract_vacations.py          # Extract vacations from QGenda
