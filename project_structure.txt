@@ -27,12 +27,6 @@
 ./docs/rotation_configuration.md
 ./docs/weekly_rotations.md
 ./project_structure.txt
-./reports
-./reports/comprehensive_fairness_analysis.png
-./reports/fairness_visualization.png
-./reports/m0_weighted_analysis_visual.png
-./reports/monthly_trend.png
-./reports/scheduling_analysis_visual_summary_REVISED.png
 ./requirements.txt
 ./scripts
 ./src
