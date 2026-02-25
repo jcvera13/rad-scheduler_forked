@@ -106,6 +106,7 @@ desktop.ini
 # *.csv
 # *.xlsx
 # *.xls
+scripts/charts/
 
 # Sensitive Configuration
 config/production_roster.csv

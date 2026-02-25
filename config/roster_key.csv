@@ -8,7 +8,7 @@ id,index,initials,name,email,role,exempt_dates,fte,participates_mercy,participat
 7,6,JC,James Cooper,,Radiologist,,1.0,yes,no,yes,yes,yes,yes,yes,no,"MG,MRI,Gen,neuro,MRI+Proc,Breast-Proc","Skull Base subspecialist"
 8,7,JJ,John Johnson,,Radiologist,,1.0,yes,no,yes,yes,yes,yes,no,no,"MG,Gen,cardiac,South_Gen+Cont","Cardiac primary"
 9,8,JCV,JuanCarlos Vera,,Radiologist,,1.0,yes,no,yes,yes,yes,no,yes,no,"neuro,nm,MRI,Gen,MRI+Proc,South_Gen+Cont","Skull Base subspecialist"
-10,9,KY,Karen Yuan,,Radiologist,,1.0,yes,no,yes,yes,yes,no,yes,no,"MRI,Gen,MRI+Proc,Breast-Proc",
+10,9,KY,Karen Yuan,,Radiologist,,1.0,yes,no,yes,yes,yes,no,yes,no,"MRI,Gen,MRI+Proc",
 11,10,KR,Kriti Rishi,,Radiologist,,1.0,yes,no,yes,yes,yes,yes,no,no,"MG,Gen",
 12,11,MS,Mark Schechter,,Radiologist,,1.0,yes,no,yes,yes,yes,yes,no,no,"nm,Gen,MG",
 13,12,MB,Michael Booker,,Radiologist,,1.0,yes,no,yes,yes,yes,no,yes,yes,"MRI,MRI+Proc,PET,Gen",
