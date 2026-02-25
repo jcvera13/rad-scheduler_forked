@@ -166,7 +166,9 @@ backup_*/
 *.BAK2
 *.BAK3
 *.bak
+
 # Other
+docs/repair_loop.md
 DEPLOYMENT_CHECKLIST.md
 DEPLOYMENT_SUMMARY.md
 CONTRIBUTING.md
